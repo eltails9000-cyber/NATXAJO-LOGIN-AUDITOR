@@ -34,7 +34,14 @@ def test_manual_version_loading(tmp_path: Path) -> None:
     from natxajo_auditor.kernel.context import RuntimeContext
     from natxajo_auditor.kernel.kernel import Kernel
 
-    context = RuntimeContext(storage_dir=tmp_path)
+    context = RuntimeContext(
+        project_root=tmp_path,
+        data_dir=tmp_path / "data",
+        config_dir=tmp_path / "config",
+        log_dir=tmp_path / "logs",
+        report_dir=tmp_path / "reports",
+        storage_dir=tmp_path / "storage",
+    )
     kernel = Kernel(context)
     kernel.startup()
     manager = kernel.container.get("versions")

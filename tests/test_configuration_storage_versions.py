@@ -4,7 +4,7 @@ from natxajo_auditor.configuration.configuration_manager import ConfigurationMan
 from natxajo_auditor.core.exceptions import AuthorizationError
 from natxajo_auditor.storage.storage_manager import StorageManager
 from natxajo_auditor.versioning.version_manager import VersionManager
-from natxajo_auditor.versioning.version_registry import VersionRegistry
+from natxajo_auditor.versioning.version_registry import VersionManifest, VersionRegistry
 
 
 def test_configuration_backup_and_restore(tmp_path: Path) -> None:
@@ -29,7 +29,7 @@ def test_restore_requires_authorization(tmp_path: Path) -> None:
 
 def test_version_switch_and_rollback(tmp_path: Path) -> None:
     registry = VersionRegistry(tmp_path)
-    registry.register(VersionManifest if False else __import__("natxajo_auditor.versioning.version_registry", fromlist=["VersionManifest"]).VersionManifest("0.2.0", "beta", "0.2.x"))
+    registry.register(VersionManifest("0.2.0", "beta", "0.2.x"))
     manager = VersionManager(registry)
     manager.load("0.1.0")
     manager.switch("0.2.0")
