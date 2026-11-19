@@ -14,19 +14,26 @@ def run_terminal() -> int:
         print("1. Estado")
         print("2. Versiones")
         print("3. Cargar versión 0.1.0")
+        print("4. Cambiar a otra versión disponible")
         print("0. Salir")
 
+        manager = kernel.container.get("versions")
         while True:
             choice = input("\nSeleccione una opción: ").strip()
             if choice == "1":
                 print(kernel.health())
             elif choice == "2":
-                manager = kernel.container.get("versions")
                 for item in manager.registry.available():
                     print(f"- {item.version} | {item.channel} | kernel {item.compatible_kernel}")
             elif choice == "3":
                 try:
                     print("Versión activa:", manager.load("0.1.0"))
+                except Exception as exc:
+                    print(f"Error: {exc}")
+            elif choice == "4":
+                version = input("Versión: ").strip()
+                try:
+                    print("Versión activa:", manager.switch(version))
                 except Exception as exc:
                     print(f"Error: {exc}")
             elif choice == "0":
