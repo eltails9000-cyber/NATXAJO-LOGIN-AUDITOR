@@ -14,6 +14,7 @@ from natxajo_auditor.kernel.context import RuntimeContext
 from natxajo_auditor.kernel.event_bus import EventBus
 from natxajo_auditor.kernel.lifecycle import Lifecycle, LifecycleState
 from natxajo_auditor.kernel.service_container import ServiceContainer
+from natxajo_auditor.modules.manager import ModuleManager
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.backups import BackupManager
 from natxajo_auditor.storage.database import Database
@@ -25,6 +26,7 @@ SERVICE_CONFIGURATION = "configuration"
 SERVICE_DATABASE = "database"
 SERVICE_AUDIT = "audit"
 SERVICE_BACKUPS = "backups"
+SERVICE_MODULES = "modules"
 SERVICE_VERSIONS = "versions"
 
 
@@ -60,6 +62,8 @@ class Kernel:
             self.services.register(
                 SERVICE_BACKUPS, BackupManager(self.context.storage_dir / "backups")
             )
+            modules = ModuleManager(self.context.modules_dir, database, audit)
+            self.services.register(SERVICE_MODULES, modules)
             self.services.register(
                 SERVICE_VERSIONS,
                 VersionManager(
@@ -67,6 +71,7 @@ class Kernel:
                     database=database,
                     audit=audit,
                     kernel_version=self.kernel_version,
+                    module_enabled=modules.is_enabled,
                 ),
             )
         except Exception:
@@ -108,6 +113,10 @@ class Kernel:
     @property
     def backups(self) -> BackupManager:
         return cast(BackupManager, self.services.get(SERVICE_BACKUPS))
+
+    @property
+    def modules(self) -> ModuleManager:
+        return cast(ModuleManager, self.services.get(SERVICE_MODULES))
 
     @property
     def versions(self) -> VersionManager:

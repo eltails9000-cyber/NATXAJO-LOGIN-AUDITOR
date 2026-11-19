@@ -29,7 +29,9 @@ Estos límites vienen del documento maestro y no se relajan:
 ## Qué NO está implementado
 
 - **Aislamiento de módulos.** No hay procesos separados, límites de recursos ni sandbox. Ningún
-  módulo se ejecuta todavía. Cuando exista, la separación en carpetas o módulos no bastará: se
+  módulo se ejecuta todavía. Los permisos que un módulo declara no se aplican: hasta que exista
+  RBAC (fase 7), cualquier usuario con acceso a la plataforma puede habilitar cualquier módulo
+  instalado. Cuando exista, la separación en carpetas o módulos no bastará: se
   documentará qué aislamiento real del sistema operativo se aplica.
 - **Cifrado de datos sensibles.** La base de datos y las copias están en texto plano.
 - **Control de acceso.** No hay usuarios ni roles (fase 7). Cualquiera con acceso al equipo

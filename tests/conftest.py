@@ -42,3 +42,24 @@ def make_manifest() -> Callable[..., Path]:
         return path
 
     return _make
+
+
+@pytest.fixture
+def make_module() -> Callable[..., Path]:
+    """Crea modules/<id>/module.json con datos válidos salvo los indicados."""
+
+    def _make(modules_dir: Path, module_id: str, **overrides: Any) -> Path:
+        data: dict[str, Any] = {
+            "id": module_id,
+            "name": f"Módulo {module_id}",
+            "version": "0.1.0",
+            "description": "Módulo de prueba",
+        }
+        data.update(overrides)
+        folder = modules_dir / module_id
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / "module.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return path
+
+    return _make

@@ -6,6 +6,7 @@ activación se registra en la auditoría dentro de la misma transacción.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from natxajo_auditor.core.exceptions import VersionError
@@ -33,11 +34,14 @@ class VersionManager:
         database: Database,
         audit: AuditLog,
         kernel_version: str,
+        module_enabled: Callable[[str], bool] | None = None,
     ) -> None:
         self._registry = registry
         self._database = database
         self._audit = audit
         self._kernel_version = kernel_version
+        # Sin sistema de módulos, ninguna dependencia está disponible.
+        self._module_enabled: Callable[[str], bool] = module_enabled or (lambda _: False)
 
     @property
     def active(self) -> str | None:
@@ -106,9 +110,9 @@ class VersionManager:
                 f"requiere núcleo {manifest.compatible_kernel}; "
                 f"el núcleo actual es {self._kernel_version}"
             )
-        if manifest.dependencies:
-            # Aún no existe un sistema de módulos: cualquier dependencia está sin resolver.
-            problems.append("dependencias no disponibles: " + ", ".join(manifest.dependencies))
+        missing = [dep for dep in manifest.dependencies if not self._module_enabled(dep)]
+        if missing:
+            problems.append("módulos requeridos no habilitados: " + ", ".join(missing))
         return problems
 
     def _activate(self, version: str, previous: str | None, reason: str) -> None:

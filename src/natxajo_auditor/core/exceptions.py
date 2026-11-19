@@ -33,3 +33,7 @@ class AuthorizationError(NatxajoError):
 
 class VersionError(NatxajoError):
     """Versión no disponible, incompatible o no cargable."""
+
+
+class ModuleError(NatxajoError):
+    """Módulo no instalado, con manifiesto inválido o con una habilitación no permitida."""

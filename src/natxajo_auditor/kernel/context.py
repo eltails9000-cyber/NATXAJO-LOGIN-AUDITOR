@@ -21,3 +21,7 @@ class RuntimeContext:
     @property
     def versions_dir(self) -> Path:
         return self.project_root / "versions"
+
+    @property
+    def modules_dir(self) -> Path:
+        return self.project_root / "modules"

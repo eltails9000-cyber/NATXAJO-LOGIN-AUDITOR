@@ -9,7 +9,7 @@ código, aunque aparezca en el documento maestro.
 | 2 | Núcleo, arranque, ciclo de vida, contenedor de servicios, bus de eventos | Hecha |
 | 3 | Configuración, almacenamiento y migraciones | Parcial |
 | 4 | Gestor de versiones y cargador manual | Parcial |
-| 5 | Sistema de módulos y dependencias | Pendiente |
+| 5 | Sistema de módulos y dependencias | Hecha (los módulos aún no ejecutan código) |
 | 6 | Plugins, catálogo, firmas y compatibilidad | Pendiente |
 | 7 | Seguridad, RBAC y sesiones | Pendiente |
 | 8 | Motor de automatización | Pendiente |
@@ -34,6 +34,16 @@ código, aunque aparezca en el documento maestro.
 - Pendiente: ramas, etiquetas (tags), snapshots, canales personalizados, comparación detallada,
   clonación, exportación, archivado, editor avanzado y asistente de creación de versiones.
   También falta resolver dependencias reales, que llegará con la fase 5.
+
+**Fase 5 (módulos)**
+- Hecho: manifiestos declarativos (`modules/<id>/module.json`) con permisos de un catálogo
+  cerrado; descubrimiento que aísla los módulos rotos; grafo de dependencias con detección de
+  dependencias ausentes y ciclos; habilitar un módulo habilita antes sus dependencias;
+  deshabilitar se rechaza si otro módulo habilitado lo requiere; estado persistente y auditado;
+  diagnóstico. Las versiones pueden requerir módulos habilitados.
+- Pendiente: ejecución de módulos (sección 11 del documento maestro, sin fase asignada);
+  aplicar los permisos declarados (depende de RBAC, fase 7); actualizar o desinstalar módulos;
+  catálogo remoto (fase 6).
 
 ## Cómo añadir una fase
 

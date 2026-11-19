@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## [Sin publicar]
+
+- Fase 5: sistema de módulos declarativos (`modules/<id>/module.json`) con permisos de catálogo
+  cerrado, descubrimiento tolerante a fallos, grafo de dependencias con detección de ciclos,
+  habilitación y deshabilitación protegidas, estado persistente auditado y diagnóstico.
+- Las versiones pueden requerir módulos habilitados. Antes, cualquier dependencia bloqueaba la
+  carga sin posibilidad de resolverla.
+- Terminal: opciones 10 a 13 para módulos.
+- Migración 3: tabla `module_states`.
+- 83 pruebas automatizadas.
+
 ## [0.1.0] - 2026-11-19
 
 Reconstrucción del proyecto desde su commit inicial. El código anterior se eliminó y sigue

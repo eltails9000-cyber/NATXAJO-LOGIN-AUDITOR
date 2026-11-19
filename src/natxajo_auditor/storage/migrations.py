@@ -44,6 +44,19 @@ MIGRATIONS: tuple[Migration, ...] = (
             """,
         ),
     ),
+    Migration(
+        version=3,
+        name="estado_de_modulos",
+        statements=(
+            """
+            CREATE TABLE module_states (
+                module_id TEXT PRIMARY KEY,
+                enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+        ),
+    ),
 )
 
 _BOOKKEEPING = (

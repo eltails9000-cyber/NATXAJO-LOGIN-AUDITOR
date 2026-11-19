@@ -52,6 +52,13 @@ sin registro. La reversión usa ese historial.
 **D7. Compatibilidad por patrón.** `compatible_kernel` acepta una versión exacta (`0.1.0`) o
 una familia de parches (`0.1.x`).
 
+**D9. Módulos declarativos y tolerantes a fallos.** Un módulo es `modules/<id>/module.json` y
+no ejecuta código. Si un manifiesto es inválido, solo ese módulo queda marcado en el diagnóstico;
+el resto sigue funcionando. Habilitar un módulo habilita antes sus dependencias, y deshabilitar
+uno se rechaza mientras otro módulo habilitado lo requiera. Así se mantiene el invariante de que
+todo módulo habilitado tiene sus dependencias habilitadas. Los permisos se validan contra un
+catálogo cerrado, pero aún no se aplican.
+
 **D8. Sin estado global.** El contexto (`RuntimeContext`) recibe la ruta del proyecto. Así las
 pruebas usan directorios temporales y no tocan el repositorio.
 

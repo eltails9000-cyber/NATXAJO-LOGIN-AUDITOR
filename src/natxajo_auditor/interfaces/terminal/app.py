@@ -9,7 +9,7 @@ from natxajo_auditor.core.exceptions import NatxajoError
 from natxajo_auditor.kernel.kernel import Kernel
 
 PENDING_FEATURES = (
-    "Módulos y plugins (fases 5 y 6)",
+    "Plugins, catálogo y firmas (fase 6)",
     "Seguridad, RBAC y sesiones (fase 7)",
     "Motor de automatización (fase 8)",
     "Motor de auditoría defensiva (fase 9)",
@@ -28,6 +28,10 @@ NATXAJO-LOGIN-AUDITOR
   7. Eventos de auditoría recientes
   8. Verificar integridad de copias
   9. Funciones pendientes
+ 10. Módulos instalados
+ 11. Habilitar un módulo
+ 12. Deshabilitar un módulo
+ 13. Diagnóstico de módulos
   m. Mostrar menú
   0. Salir"""
 
@@ -63,6 +67,10 @@ def _dispatch(kernel: Kernel, choice: str, read: Read, write: Write) -> None:
         "7": lambda: _show_audit(kernel, write),
         "8": lambda: _show_integrity(kernel, write),
         "9": lambda: _show_pending(write),
+        "10": lambda: _show_modules(kernel, write),
+        "11": lambda: _enable_module(kernel, read, write),
+        "12": lambda: _disable_module(kernel, read, write),
+        "13": lambda: _show_module_diagnostics(kernel, write),
         "m": lambda: write(MENU),
     }
     action = actions.get(choice)
@@ -154,3 +162,50 @@ def _show_pending(write: Write) -> None:
     write("Funciones pendientes (no implementadas todavía):")
     for feature in PENDING_FEATURES:
         write(f"  - {feature}")
+
+
+def _show_modules(kernel: Kernel, write: Write) -> None:
+    statuses = kernel.modules.list_modules()
+    if not statuses:
+        write("No hay módulos instalados en la carpeta modules/")
+        return
+    for status in statuses:
+        manifest = status.manifest
+        state = "habilitado" if status.enabled else "deshabilitado"
+        requires = ", ".join(manifest.requires) or "ninguna"
+        permissions = ", ".join(manifest.permissions) or "ninguno"
+        write(
+            f"- {manifest.module_id} {manifest.version} | {state} | requiere: {requires} "
+            f"| permisos: {permissions}"
+        )
+        for problem in status.problems:
+            write(f"    problema: {problem}")
+
+
+def _enable_module(kernel: Kernel, read: Read, write: Write) -> None:
+    module_id = read("Módulo a habilitar: ").strip()
+    changed = kernel.modules.enable(module_id)
+    if not changed:
+        write(f"{module_id} ya estaba habilitado")
+        return
+    write("Habilitados: " + ", ".join(changed))
+
+
+def _disable_module(kernel: Kernel, read: Read, write: Write) -> None:
+    module_id = read("Módulo a deshabilitar: ").strip()
+    kernel.modules.disable(module_id)
+    write(f"Deshabilitado: {module_id}")
+
+
+def _show_module_diagnostics(kernel: Kernel, write: Write) -> None:
+    report = kernel.modules.diagnose()
+    if not report:
+        write("No hay módulos que diagnosticar")
+        return
+    for module_id, problems in sorted(report.items()):
+        if not problems:
+            write(f"- {module_id}: correcto")
+            continue
+        write(f"- {module_id}: {len(problems)} problema(s)")
+        for problem in problems:
+            write(f"    {problem}")

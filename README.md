@@ -44,7 +44,7 @@ python -m mypy
 
 Implementado: núcleo con ciclo de vida, configuración validada con historial y copias restaurables
 con autorización, base SQLite con migraciones, auditoría, manifiestos de versión con carga manual,
-cambio y reversión, y terminal interactiva.
+cambio y reversión, módulos declarativos con dependencias habilitables, y terminal interactiva.
 
-Pendiente: módulos, plugins, RBAC, automatización, motor de auditoría, interfaz de escritorio,
-informes y mantenimiento. No se declaran como disponibles hasta que tengan pruebas.
+Pendiente: ejecución de módulos, plugins, RBAC, automatización, motor de auditoría, interfaz de
+escritorio, informes y mantenimiento. No se declaran como disponibles hasta que tengan pruebas.
