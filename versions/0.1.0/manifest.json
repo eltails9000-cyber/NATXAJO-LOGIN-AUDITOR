@@ -1,0 +1,8 @@
+{
+  "version": "0.1.0",
+  "channel": "development",
+  "compatible_kernel": "0.1.x",
+  "name": "Núcleo base",
+  "description": "Núcleo con ciclo de vida, configuración validada, almacenamiento con migraciones, auditoría y gestor de versiones.",
+  "dependencies": []
+}

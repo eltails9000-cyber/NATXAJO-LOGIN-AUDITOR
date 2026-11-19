@@ -1,0 +1,67 @@
+# Arquitectura
+
+## Capas y reglas de dependencia
+
+```
+interfaces  ──►  kernel  ──►  configuration, storage, versioning  ──►  core
+```
+
+- `core` no depende de nada del proyecto. Contiene excepciones y utilidades.
+- `storage` y `configuration` no conocen el núcleo ni la terminal.
+- `versioning` usa `storage` (base de datos y auditoría) y `core`.
+- `kernel` compone los servicios. Es el único que conoce cómo se arrancan.
+- `interfaces` solo consume servicios del núcleo. No contiene reglas de negocio.
+
+## Ciclo de vida del núcleo
+
+```
+CREATED ──► STARTING ──► RUNNING ──► STOPPING ──► STOPPED
+                 │                       ▲
+                 └──► FAILED ────────────┘
+```
+
+Las transiciones no permitidas lanzan `LifecycleError`. Si el arranque falla, los servicios
+ya abiertos se cierran y el núcleo queda en `FAILED`. Un núcleo parado no se puede reiniciar:
+se crea otra instancia.
+
+## Decisiones
+
+**D1. Configuración JSON con esquema estricto.** Las claves desconocidas se rechazan para
+detectar errores tipográficos. Las claves ausentes toman su valor por defecto. Cada cambio
+guarda la versión anterior en `config/history/` y se escribe de forma atómica.
+
+**D2. La exigencia de autorización para auditar no es configurable.** `auditing.require_authorization`
+debe ser `true`. Es un límite de seguridad del documento maestro, no una preferencia.
+
+**D3. Copias con manifiesto SHA-256.** Cada copia registra su hash. Una copia alterada o sin
+manifiesto no se restaura. La restauración requiere `authorized=True` y no sobrescribe un
+destino existente sin `overwrite=True`.
+
+**D4. Migraciones versionadas.** Cada migración se aplica una vez, dentro de una transacción.
+Si una migración falla, no deja cambios parciales. Una base de datos con migraciones que este
+código no conoce se rechaza.
+
+**D5. Versiones como carpetas con manifiesto.** `versions/<versión>/manifest.json` describe
+cada versión. El nombre de la carpeta debe coincidir con la versión declarada. El núcleo no
+conoce ninguna versión concreta: solo sabe si una versión declara ser compatible con él.
+
+**D6. Una sola versión activa.** La activa se guarda en `platform_metadata`. Cada activación
+se registra en `audit_events` dentro de la misma transacción, así que nunca hay un cambio
+sin registro. La reversión usa ese historial.
+
+**D7. Compatibilidad por patrón.** `compatible_kernel` acepta una versión exacta (`0.1.0`) o
+una familia de parches (`0.1.x`).
+
+**D8. Sin estado global.** El contexto (`RuntimeContext`) recibe la ruta del proyecto. Así las
+pruebas usan directorios temporales y no tocan el repositorio.
+
+## Dónde vive cada cosa
+
+| Dato | Ubicación | Notas |
+|---|---|---|
+| Configuración | `config/app.json` | Ignorado por git |
+| Historial de configuración | `config/history/` | Ignorado por git |
+| Copias de configuración | `config/backups/` | Ignorado por git |
+| Base de datos | `storage/natxajo.db` | Ignorado por git |
+| Copias de almacenamiento | `storage/backups/` | Ignorado por git |
+| Manifiestos de versión | `versions/` | Versionado en git |
