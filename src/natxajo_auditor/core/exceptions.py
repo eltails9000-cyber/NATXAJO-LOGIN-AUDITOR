@@ -37,3 +37,7 @@ class VersionError(NatxajoError):
 
 class ModuleError(NatxajoError):
     """Módulo no instalado, con manifiesto inválido o con una habilitación no permitida."""
+
+
+class PluginError(NatxajoError):
+    """Plugin no instalado, con un estado que no permite la operación o con una copia alterada."""

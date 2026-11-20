@@ -25,3 +25,8 @@ class RuntimeContext:
     @property
     def modules_dir(self) -> Path:
         return self.project_root / "modules"
+
+    @property
+    def plugins_dir(self) -> Path:
+        """Datos de plugins: copias almacenadas y área de trabajo para verificar paquetes."""
+        return self.storage_dir / "plugins"

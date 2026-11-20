@@ -5,8 +5,13 @@ from typing import Any
 
 import pytest
 
+from natxajo_auditor.core import ed25519
 from natxajo_auditor.kernel.context import RuntimeContext
 from natxajo_auditor.kernel.kernel import Kernel
+from natxajo_auditor.plugins.package import build_package
+
+PLUGIN_SECRET = bytes(range(1, 33))
+PLUGIN_KEY_ID = "editor_pruebas"
 
 
 @pytest.fixture
@@ -63,3 +68,51 @@ def make_module() -> Callable[..., Path]:
         return path
 
     return _make
+
+
+@pytest.fixture
+def make_plugin_source() -> Callable[..., Path]:
+    """Crea una carpeta de paquete de plugin firmada, con plugin.json y un archivo de datos."""
+
+    def _make(
+        root: Path,
+        plugin_id: str = "plugin_ejemplo",
+        version: str = "0.1.0",
+        secret: bytes = PLUGIN_SECRET,
+        key_id: str = PLUGIN_KEY_ID,
+        **overrides: Any,
+    ) -> Path:
+        data: dict[str, Any] = {
+            "id": plugin_id,
+            "name": f"Plugin {plugin_id}",
+            "version": version,
+            "author": "Pruebas",
+            "description": "Plugin de prueba",
+            "api_version": "1.0",
+            "compatible_kernel": "0.1.x",
+        }
+        data.update(overrides)
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "plugin.json").write_text(json.dumps(data), encoding="utf-8")
+        (root / "datos.txt").write_text("contenido de prueba", encoding="utf-8")
+        build_package(root, secret, key_id)
+        return root
+
+    return _make
+
+
+@pytest.fixture
+def register_publisher() -> Callable[..., None]:
+    """Registra un editor con la clave pública derivada de un secreto de prueba."""
+
+    def _register(
+        kernel: Kernel,
+        trust_level: str = "official",
+        key_id: str = PLUGIN_KEY_ID,
+        secret: bytes = PLUGIN_SECRET,
+    ) -> None:
+        kernel.plugins.trust.add_publisher(
+            key_id, f"Editor {key_id}", ed25519.public_key(secret), trust_level
+        )
+
+    return _register

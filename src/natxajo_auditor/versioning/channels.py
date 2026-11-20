@@ -1,4 +1,4 @@
-"""Canales de distribución iniciales. Los canales personalizados están pendientes (ver docs/roadmap.md)."""
+"""Canales de distribución iniciales. Los canales personalizados están pendientes (ver docs/IMPLEMENTATION_STATUS.md)."""
 
 from __future__ import annotations
 

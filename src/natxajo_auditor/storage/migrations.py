@@ -57,6 +57,47 @@ MIGRATIONS: tuple[Migration, ...] = (
             """,
         ),
     ),
+    Migration(
+        version=4,
+        name="plugins",
+        statements=(
+            """
+            CREATE TABLE plugin_publishers (
+                key_id TEXT PRIMARY KEY,
+                display_name TEXT NOT NULL,
+                public_key TEXT NOT NULL,
+                trust_level TEXT NOT NULL CHECK (
+                    trust_level IN ('official', 'verified', 'third_party', 'revoked')
+                ),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE plugin_installs (
+                plugin_id TEXT PRIMARY KEY,
+                version TEXT NOT NULL,
+                enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+                publisher_key_id TEXT NOT NULL REFERENCES plugin_publishers (key_id),
+                integrity_sha256 TEXT NOT NULL,
+                dependencies TEXT NOT NULL,
+                installed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE plugin_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plugin_id TEXT NOT NULL,
+                version TEXT NOT NULL,
+                reviewer TEXT NOT NULL,
+                decision TEXT NOT NULL CHECK (decision IN ('approved', 'rejected')),
+                findings TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+        ),
+    ),
 )
 
 _BOOKKEEPING = (

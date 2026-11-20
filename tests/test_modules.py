@@ -58,7 +58,7 @@ def modules(tmp_path: Path, database: Database) -> ModuleManager:
         {"requires": ["Mal Id"]},
         {"requires": ["otro", "otro"]},
         {"permissions": ["no.existe"]},
-        {"permissions": ["auditoria.leer", "auditoria.leer"]},
+        {"permissions": ["auditoria:nucleo:evento:leer", "auditoria:nucleo:evento:leer"]},
         {"extra": 1},
     ],
 )
@@ -75,8 +75,14 @@ def test_module_manifest_missing_field_is_rejected() -> None:
 
 
 def test_valid_module_manifest_keeps_declared_permissions() -> None:
-    manifest = _manifest(permissions=["auditoria.leer", "copias.leer"], requires=["otro_mod"])
-    assert manifest.permissions == ("auditoria.leer", "copias.leer")
+    manifest = _manifest(
+        permissions=["auditoria:nucleo:evento:leer", "almacenamiento:nucleo:copia:leer"],
+        requires=["otro_mod"],
+    )
+    assert manifest.permissions == (
+        "auditoria:nucleo:evento:leer",
+        "almacenamiento:nucleo:copia:leer",
+    )
     assert manifest.requires == ("otro_mod",)
 
 
@@ -201,10 +207,10 @@ def test_state_survives_reopening_the_database(
 def test_diagnose_reports_broken_and_missing(
     modules: ModuleManager, tmp_path: Path, make_module: Callable[..., Path]
 ) -> None:
-    make_module(tmp_path / "modules", "roto_mod", permissions=["x.y"])
+    make_module(tmp_path / "modules", "roto_mod", permissions=["desconocido:nucleo:evento:leer"])
     make_module(tmp_path / "modules", "ui_mod", requires=["falta_mod"])
     report = modules.diagnose()
-    assert "permisos desconocidos" in report["roto_mod"][0]
+    assert "subsistema desconocido" in report["roto_mod"][0]
     assert any("no instalado" in problem for problem in report["ui_mod"])
 
 

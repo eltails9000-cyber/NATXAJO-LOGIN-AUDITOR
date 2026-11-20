@@ -25,6 +25,13 @@ Estos límites vienen del documento maestro y no se relajan:
 - **Escritura atómica.** Los archivos de configuración y las copias se escriben en un temporal
   y luego se sustituyen. Un fallo a mitad de escritura no deja el archivo a medias.
 - **Autorización de auditorías obligatoria.** El esquema de configuración no permite desactivarla.
+- **Plugins firmados.** Un paquete se acepta solo si su firma Ed25519 corresponde a un editor
+  registrado y no revocado, si cada archivo coincide con su hash y si su versión de API y de
+  núcleo son compatibles. Un paquete alterado se rechaza, y la copia almacenada se vuelve a
+  verificar antes de habilitarla. Un editor revocado deshabilita sus plugins y los que dependen de
+  ellos. Los rechazos quedan en la auditoría. Límites: la verificación no es de tiempo constante,
+  aceptable para datos públicos pero no para firmar secretos; la revisión del inventario de
+  archivos es heurística y no sustituye la revisión humana.
 
 ## Qué NO está implementado
 
@@ -36,7 +43,9 @@ Estos límites vienen del documento maestro y no se relajan:
 - **Cifrado de datos sensibles.** La base de datos y las copias están en texto plano.
 - **Control de acceso.** No hay usuarios ni roles (fase 7). Cualquiera con acceso al equipo
   puede ejecutar la plataforma.
-- **Firmas de plugins e integridad de paquetes.** No hay plugins todavía.
+- **Ejecución de plugins.** Habilitar un plugin solo registra su estado. No hay procesos separados
+  ni límites de recursos. Cuando exista ejecución, se documentará el aislamiento real del sistema
+  operativo que se aplica.
 
 ## Permisos de archivos
 

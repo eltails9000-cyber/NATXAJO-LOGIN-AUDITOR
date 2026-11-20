@@ -21,7 +21,7 @@ El código anterior sigue en el historial (commit `3868286`) y puede consultarse
 ## Estructura adoptada
 
 Se implementan solo los subsistemas con responsabilidad real hoy. Los demás nombres del
-documento maestro quedan pendientes en `docs/roadmap.md`; no se crean carpetas vacías.
+documento maestro quedan pendientes en `docs/IMPLEMENTATION_STATUS.md`; no se crean carpetas vacías.
 
 ```
 src/natxajo_auditor/

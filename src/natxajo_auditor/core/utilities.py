@@ -28,6 +28,11 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def sha256_bytes(data: bytes) -> str:
+    """SHA-256 de un bloque de bytes en hexadecimal."""
+    return hashlib.sha256(data).hexdigest()
+
+
 def atomic_write_bytes(path: Path, data: bytes) -> None:
     """Escribe en un temporal del mismo directorio y lo sustituye de forma atómica.
 

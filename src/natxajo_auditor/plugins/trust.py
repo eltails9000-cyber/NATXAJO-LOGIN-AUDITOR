@@ -1,0 +1,99 @@
+"""Editores de confianza: claves públicas Ed25519 registradas y su nivel de confianza.
+
+Niveles:
+- official y verified: pueden habilitarse sin revisión adicional.
+- third_party: requiere una revisión aprobada antes de habilitarse.
+- revoked: ningún paquete firmado con esa clave se acepta ni se mantiene habilitado.
+"""
+
+from __future__ import annotations
+
+import base64
+from dataclasses import dataclass
+from typing import Any
+
+from natxajo_auditor.core.exceptions import PluginError, ValidationError
+from natxajo_auditor.core.validation import KEY_ID, require_text
+from natxajo_auditor.storage.database import Database
+
+OFFICIAL = "official"
+VERIFIED = "verified"
+THIRD_PARTY = "third_party"
+REVOKED = "revoked"
+TRUST_LEVELS: frozenset[str] = frozenset({OFFICIAL, VERIFIED, THIRD_PARTY})
+
+
+@dataclass(frozen=True)
+class Publisher:
+    key_id: str
+    display_name: str
+    public_key: bytes
+    trust_level: str
+
+
+def requires_review(trust_level: str) -> bool:
+    return trust_level == THIRD_PARTY
+
+
+class TrustStore:
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def add_publisher(
+        self, key_id: str, display_name: str, public_key: bytes, trust_level: str
+    ) -> None:
+        if not KEY_ID.match(key_id):
+            raise ValidationError(f"identificador de editor no válido: {key_id}")
+        require_text(display_name, "nombre", "editor")
+        if len(public_key) != 32:
+            raise ValidationError("la clave pública Ed25519 debe tener 32 bytes")
+        if trust_level not in TRUST_LEVELS:
+            raise ValidationError(
+                f"nivel de confianza no válido: {trust_level} "
+                f"(use: {', '.join(sorted(TRUST_LEVELS))})"
+            )
+        if self.find(key_id) is not None:
+            raise PluginError(f"el editor ya está registrado: {key_id}")
+        self._database.execute(
+            "INSERT INTO plugin_publishers (key_id, display_name, public_key, trust_level) "
+            "VALUES (?, ?, ?, ?)",
+            (key_id, display_name, base64.b64encode(public_key).decode("ascii"), trust_level),
+        )
+
+    def revoke(self, key_id: str) -> None:
+        self.get_publisher(key_id)
+        self._database.execute(
+            "UPDATE plugin_publishers SET trust_level = ?, updated_at = CURRENT_TIMESTAMP "
+            "WHERE key_id = ?",
+            (REVOKED, key_id),
+        )
+
+    def find(self, key_id: str) -> Publisher | None:
+        rows = self._database.fetchall(
+            "SELECT key_id, display_name, public_key, trust_level "
+            "FROM plugin_publishers WHERE key_id = ?",
+            (key_id,),
+        )
+        return _to_publisher(rows[0]) if rows else None
+
+    def get_publisher(self, key_id: str) -> Publisher:
+        publisher = self.find(key_id)
+        if publisher is None:
+            raise PluginError(f"editor no registrado: {key_id}")
+        return publisher
+
+    def publishers(self) -> list[Publisher]:
+        rows = self._database.fetchall(
+            "SELECT key_id, display_name, public_key, trust_level "
+            "FROM plugin_publishers ORDER BY key_id"
+        )
+        return [_to_publisher(row) for row in rows]
+
+
+def _to_publisher(row: tuple[Any, ...]) -> Publisher:
+    return Publisher(
+        key_id=str(row[0]),
+        display_name=str(row[1]),
+        public_key=base64.b64decode(str(row[2])),
+        trust_level=str(row[3]),
+    )

@@ -15,6 +15,7 @@ from natxajo_auditor.kernel.event_bus import EventBus
 from natxajo_auditor.kernel.lifecycle import Lifecycle, LifecycleState
 from natxajo_auditor.kernel.service_container import ServiceContainer
 from natxajo_auditor.modules.manager import ModuleManager
+from natxajo_auditor.plugins.manager import PluginManager
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.backups import BackupManager
 from natxajo_auditor.storage.database import Database
@@ -28,6 +29,7 @@ SERVICE_AUDIT = "audit"
 SERVICE_BACKUPS = "backups"
 SERVICE_MODULES = "modules"
 SERVICE_VERSIONS = "versions"
+SERVICE_PLUGINS = "plugins"
 
 
 class Kernel:
@@ -72,6 +74,15 @@ class Kernel:
                     audit=audit,
                     kernel_version=self.kernel_version,
                     module_enabled=modules.is_enabled,
+                ),
+            )
+            self.services.register(
+                SERVICE_PLUGINS,
+                PluginManager(
+                    plugins_dir=self.context.plugins_dir,
+                    database=database,
+                    audit=audit,
+                    kernel_version=self.kernel_version,
                 ),
             )
         except Exception:
@@ -121,6 +132,10 @@ class Kernel:
     @property
     def versions(self) -> VersionManager:
         return cast(VersionManager, self.services.get(SERVICE_VERSIONS))
+
+    @property
+    def plugins(self) -> PluginManager:
+        return cast(PluginManager, self.services.get(SERVICE_PLUGINS))
 
     def _close_services(self) -> None:
         if self.services.has(SERVICE_DATABASE):

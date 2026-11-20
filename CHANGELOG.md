@@ -2,6 +2,18 @@
 
 ## [Sin publicar]
 
+- Fase 6 (parcial): plugins como paquetes firmados. Firma Ed25519 en Python puro, sin
+  dependencias, comprobada con el RFC 8032, `cryptography` y OpenSSL. Integridad por SHA-256 de
+  cada archivo, editores de confianza con revocación, catálogo local con índice verificado,
+  revisión registrada para editores de terceros, habilitación con dependencias, revocación en
+  cascada y auditoría. Los plugins aún no se ejecutan ni se gestionan desde la terminal.
+- Cambio incompatible: los permisos de los manifiestos usan el formato
+  `subsistema:modulo:recurso:accion` (antes `auditoria.leer`). Los módulos que usaban el formato
+  anterior deben actualizarse.
+- Migración 4: tablas `plugin_publishers`, `plugin_installs` y `plugin_reviews`.
+- Validadores compartidos (`core/validation.py`) y grafo de dependencias genérico
+  (`core/graph.py`). `modules/permissions.py` se sustituye por `security/permissions.py`.
+- `docs/roadmap.md` se sustituye por `docs/IMPLEMENTATION_STATUS.md`, con estados definidos.
 - Fase 5: sistema de módulos declarativos (`modules/<id>/module.json`) con permisos de catálogo
   cerrado, descubrimiento tolerante a fallos, grafo de dependencias con detección de ciclos,
   habilitación y deshabilitación protegidas, estado persistente auditado y diagnóstico.
@@ -9,7 +21,7 @@
   carga sin posibilidad de resolverla.
 - Terminal: opciones 10 a 13 para módulos.
 - Migración 3: tabla `module_states`.
-- 83 pruebas automatizadas.
+- 161 casos de prueba automatizados, con ruff y mypy en modo estricto sin errores.
 
 ## [0.1.0] - 2026-11-19
 

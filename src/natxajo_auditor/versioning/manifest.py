@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from natxajo_auditor.core.exceptions import ValidationError
+from natxajo_auditor.core.validation import (
+    SEMVER,
+    require_kernel_pattern,
+    require_semver,
+    require_string_list,
+    require_text,
+)
 from natxajo_auditor.versioning.channels import Channel, parse_channel
 
-_VERSION = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
-_COMPATIBLE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(x|0|[1-9]\d*)$")
 REQUIRED_FIELDS = frozenset({"version", "channel", "compatible_kernel", "name", "description"})
 OPTIONAL_FIELDS = frozenset({"dependencies"})
 
@@ -39,24 +43,15 @@ class VersionManifest:
         if unknown:
             raise ValidationError(f"{source}: campos desconocidos {sorted(unknown)}")
 
-        version = _text(data["version"], "version", source)
-        if not _VERSION.match(version):
-            raise ValidationError(f"{source}: versión no válida: {version}")
-        compatible = _text(data["compatible_kernel"], "compatible_kernel", source)
-        if not _COMPATIBLE.match(compatible):
-            raise ValidationError(f"{source}: compatible_kernel no válido: {compatible}")
-
-        dependencies = data.get("dependencies", [])
-        if not isinstance(dependencies, list) or not all(isinstance(d, str) for d in dependencies):
-            raise ValidationError(f"{source}: dependencies debe ser una lista de textos")
-
         return cls(
-            version=version,
+            version=require_semver(data["version"], "version", source),
             channel=parse_channel(data["channel"]),
-            compatible_kernel=compatible,
-            name=_text(data["name"], "name", source),
-            description=_text(data["description"], "description", source),
-            dependencies=tuple(dependencies),
+            compatible_kernel=require_kernel_pattern(
+                data["compatible_kernel"], "compatible_kernel", source
+            ),
+            name=require_text(data["name"], "name", source),
+            description=require_text(data["description"], "description", source),
+            dependencies=require_string_list(data.get("dependencies"), "dependencies", source),
         )
 
 
@@ -72,14 +67,8 @@ def load_manifest(path: Path) -> VersionManifest:
 
 def kernel_matches(pattern: str, kernel_version: str) -> bool:
     """Compara una versión de núcleo con un patrón exacto (0.1.0) o de parche (0.1.x)."""
-    if not _VERSION.match(kernel_version):
+    if not SEMVER.match(kernel_version):
         raise ValidationError(f"Versión de núcleo no válida: {kernel_version}")
     if pattern.endswith(".x"):
         return pattern.split(".")[:2] == kernel_version.split(".")[:2]
     return pattern == kernel_version
-
-
-def _text(value: object, field: str, source: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValidationError(f"{source}: {field} debe ser un texto no vacío")
-    return value
