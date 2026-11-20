@@ -137,17 +137,32 @@ def test_failed_logins_lock_the_account_until_the_lockout_expires(
     for _ in range(5):
         with pytest.raises(AuthorizationError, match="credenciales no válidas"):
             secure.security.login(ADMIN_USER, "contraseña-incorrecta")
-    with pytest.raises(AuthorizationError, match="bloqueada temporalmente"):
+    # Durante el bloqueo ni la contraseña correcta entra, y el mensaje no cambia.
+    with pytest.raises(AuthorizationError, match="credenciales no válidas"):
         secure.security.login(ADMIN_USER, ADMIN_PASSWORD)
     clock.advance(timedelta(minutes=16))
     assert secure.security.login(ADMIN_USER, ADMIN_PASSWORD)
     assert len(secure.audit.events_of_type("account.login_failed")) == 5
+    assert len(secure.audit.events_of_type("account.login_blocked")) == 1
 
 
 def test_unknown_user_gets_the_same_message_as_a_wrong_password(secure: Kernel) -> None:
     _bootstrap(secure)
     with pytest.raises(AuthorizationError, match="credenciales no válidas"):
         secure.security.login("nadie_real", PASSWORD)
+
+
+def test_locked_account_answers_exactly_like_an_unknown_user(secure: Kernel) -> None:
+    _bootstrap(secure)
+    secure.security.create_account("usuario_bloqueado", PASSWORD, ["operador"])
+    for _ in range(5):
+        with pytest.raises(AuthorizationError):
+            secure.security.login("usuario_bloqueado", "contraseña-incorrecta")
+    with pytest.raises(AuthorizationError) as locked:
+        secure.security.login("usuario_bloqueado", PASSWORD)
+    with pytest.raises(AuthorizationError) as unknown:
+        secure.security.login("nadie_real", PASSWORD)
+    assert str(locked.value) == str(unknown.value) == "credenciales no válidas"
 
 
 def test_a_success_resets_the_failure_counter(secure: Kernel) -> None:

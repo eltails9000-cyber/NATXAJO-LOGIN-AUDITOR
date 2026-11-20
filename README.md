@@ -40,6 +40,7 @@ python -m mypy
 - `docs/arquitectura.md`: capas, ciclo de vida, decisiones (D1 a D8) y ubicación de los datos.
 - `docs/seguridad.md`: límites de uso, controles implementados y lo que no está implementado.
 - `docs/IMPLEMENTATION_STATUS.md`: estado verificado de cada fase.
+- `docs/CLAUDE_ARCHITECTURE_AUDIT.md`: auditoría de arquitectura y plan de corrección por etapas.
 - `CHANGELOG.md`: historial de cambios.
 
 ## Estado

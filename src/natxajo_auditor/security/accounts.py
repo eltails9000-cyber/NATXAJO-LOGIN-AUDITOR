@@ -127,7 +127,11 @@ class AccountStore:
         stored_hash, status, failed_text, locked_text = rows[0]
         locked_until = from_iso(None if locked_text is None else str(locked_text))
         if locked_until is not None and locked_until > now:
-            raise AuthorizationError("cuenta bloqueada temporalmente; inténtelo más tarde")
+            # Mismo coste y mismo mensaje que una contraseña incorrecta: el bloqueo no revela
+            # que la cuenta existe. Tampoco entra la contraseña correcta mientras dura.
+            verify_password(password, str(stored_hash))
+            self._audit.record("account.login_blocked", {"username": username})
+            raise AuthorizationError(INVALID_CREDENTIALS)
         if not verify_password(password, str(stored_hash)):
             failed = int(failed_text) + 1
             locked = failed >= MAX_FAILED_ATTEMPTS

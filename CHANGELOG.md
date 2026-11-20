@@ -2,6 +2,9 @@
 
 ## [Sin publicar]
 
+- Corrección de seguridad: durante un bloqueo de cuenta, la respuesta ya no revela que la cuenta
+  existe. Los intentos bloqueados quedan en la auditoría como `account.login_blocked`.
+- Auditoría de arquitectura en `docs/CLAUDE_ARCHITECTURE_AUDIT.md`, con plan de corrección por etapas.
 - Fase 7 (parcial): seguridad y control de acceso. Cuentas con contraseñas PBKDF2-HMAC-SHA256 y
   bloqueo tras cinco fallos; roles integrados con separación de funciones entre `operador` y
   `auditor`, herencia de hasta 5 niveles y anti-escalada; sesiones con caducidad por inactividad (15

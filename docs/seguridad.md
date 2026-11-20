@@ -36,8 +36,11 @@ Estos límites vienen del documento maestro y no se relajan:
   de 16 bytes y 600 000 iteraciones por defecto. Nunca se guardan en texto plano ni aparecen en la
   auditoría. La política exige entre 12 y 256 caracteres, al menos 4 caracteres distintos, y
   prohíbe usar el nombre de usuario como contraseña. Las comparaciones usan `hmac.compare_digest`.
-- **Bloqueo por fallos.** Cinco fallos seguidos bloquean la cuenta durante 15 minutos. Un usuario
-  inexistente recibe el mismo mensaje que una contraseña incorrecta y realiza el mismo cálculo.
+- **Bloqueo por fallos.** Cinco fallos seguidos bloquean la cuenta durante 15 minutos. Mientras
+  dura, cualquier intento, también con la contraseña correcta, recibe el mismo mensaje que una
+  contraseña incorrecta y queda en la auditoría como `account.login_blocked`. Un usuario inexistente
+  recibe ese mismo mensaje y realiza el mismo cálculo, así que la respuesta no revela qué cuentas
+  existen.
 - **Roles y separación de funciones.** Roles integrados `administrador`, `operador` y `auditor`.
   Ninguna cuenta puede tener a la vez `operador` y `auditor`. Un rol nuevo solo puede conceder
   permisos que posea quien lo crea, y la herencia admite como máximo 5 niveles.

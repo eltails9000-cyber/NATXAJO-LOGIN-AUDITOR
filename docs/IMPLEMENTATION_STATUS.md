@@ -106,8 +106,8 @@ Pruebas automatizadas: 213 casos, con ruff y mypy en modo estricto sin errores.
 ### Verificado
 
 - **Cuentas y contraseñas:** PBKDF2-HMAC-SHA256 con sal de 16 bytes, política de contraseñas,
-  bloqueo tras 5 fallos durante 15 minutos, y mensaje de error idéntico para usuario inexistente o
-  contraseña incorrecta.
+  bloqueo tras 5 fallos durante 15 minutos. El mensaje de error es idéntico para usuario inexistente,
+  contraseña incorrecta y cuenta bloqueada (corregido en la etapa 1).
 - **Sesiones:** ficha de 256 bits guardada como hash, caducidad por inactividad (15 minutos) y
   absoluta (8 horas), límite de 3 sesiones por cuenta, cierre y reautenticación.
 - **Roles:** builtin `administrador`, `operador` y `auditor`; separación de funciones entre
@@ -141,6 +141,19 @@ Pruebas automatizadas: 213 casos, con ruff y mypy en modo estricto sin errores.
 - **Multiempresa.** No hay separación entre empresas, aplicaciones ni entornos.
 
 Detalle de límites y de qué protege cada control: `docs/seguridad.md`.
+
+## Auditoría de arquitectura (etapa 1)
+
+`docs/CLAUDE_ARCHITECTURE_AUDIT.md` evalúa el commit `16cbcf9` y propone el plan por etapas.
+Hallazgos prioritarios:
+
+- **P0:** la autorización solo se aplica en la terminal. Los servicios (`kernel.security`,
+  `kernel.plugins`, `kernel.modules`, `kernel.versions`) no comprueban permisos.
+- **P0:** el registro de editores de confianza no exige permiso ni queda en la auditoría.
+- **P1:** los cambios de estado de cuentas y sesiones no van en la misma transacción que su
+  auditoría.
+- **P1:** la base de datos no tiene copia de seguridad desde la aplicación.
+- **Corregido:** durante un bloqueo, la respuesta revelaba que la cuenta existía.
 
 ## Otros pendientes
 
