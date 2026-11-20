@@ -2,6 +2,17 @@
 
 ## [Sin publicar]
 
+- Fase 7 (parcial): seguridad y control de acceso. Cuentas con contraseñas PBKDF2-HMAC-SHA256 y
+  bloqueo tras cinco fallos; roles integrados con separación de funciones entre `operador` y
+  `auditor`, herencia de hasta 5 niveles y anti-escalada; sesiones con caducidad por inactividad (15
+  minutos) y absoluta (8 horas), límite de 3 sesiones por cuenta y reautenticación; permisos
+  temporales aprobados por otra cuenta; guardián de operaciones críticas que registra denegaciones y
+  ejecuciones; protección del último administrador. Terminal: creación del primer administrador,
+  inicio de sesión, menú filtrado por permisos y opciones 14 a 17.
+- Fase 7, pendiente: revocar permisos, deshabilitar cuentas y cambiar roles o contraseñas solo desde
+  la API; recuperación de acceso; cifrado de la base de datos; integridad de la auditoría.
+- Migración 5: tablas `accounts`, `roles`, `role_grants`, `role_parents`, `account_roles`,
+  `permission_grants` y `sessions`.
 - Fase 6 (parcial): plugins como paquetes firmados. Firma Ed25519 en Python puro, sin
   dependencias, comprobada con el RFC 8032, `cryptography` y OpenSSL. Integridad por SHA-256 de
   cada archivo, editores de confianza con revocación, catálogo local con índice verificado,
@@ -21,7 +32,7 @@
   carga sin posibilidad de resolverla.
 - Terminal: opciones 10 a 13 para módulos.
 - Migración 3: tabla `module_states`.
-- 161 casos de prueba automatizados, con ruff y mypy en modo estricto sin errores.
+- 213 casos de prueba automatizados, con ruff y mypy en modo estricto sin errores.
 
 ## [0.1.0] - 2026-11-19
 

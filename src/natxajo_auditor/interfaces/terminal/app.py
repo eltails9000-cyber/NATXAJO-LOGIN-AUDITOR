@@ -1,83 +1,171 @@
-"""Interfaz de terminal. Solo presenta datos y delega cada acción en los servicios del núcleo."""
+"""Interfaz de terminal. Pide inicio de sesión y muestra solo las opciones que la cuenta puede usar.
+
+La terminal presenta datos y pide confirmaciones. No decide permisos: cada acción pasa por el
+guardián de operaciones del núcleo, que vuelve a comprobarlos.
+"""
 
 from __future__ import annotations
 
+import getpass
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 
-from natxajo_auditor.core.exceptions import NatxajoError
+from natxajo_auditor.core.exceptions import NatxajoError, ValidationError
 from natxajo_auditor.kernel.kernel import Kernel
+from natxajo_auditor.security.sessions import SessionError
 
 PENDING_FEATURES = (
-    "Plugins, catálogo y firmas (fase 6)",
-    "Seguridad, RBAC y sesiones (fase 7)",
+    "Gestión de plugins desde la terminal (fase 6)",
     "Motor de automatización (fase 8)",
     "Motor de auditoría defensiva (fase 9)",
     "Interfaz de escritorio (fase 10)",
     "Diagnósticos, informes y mantenimiento (fases 11 y 12)",
+    "Ejecución de módulos y plugins (sin fase asignada)",
 )
-
-MENU = """
-NATXAJO-LOGIN-AUDITOR
-  1. Estado del sistema
-  2. Versiones disponibles
-  3. Detalle y compatibilidad de una versión
-  4. Cargar una versión
-  5. Revertir a la versión anterior
-  6. Historial de activaciones
-  7. Eventos de auditoría recientes
-  8. Verificar integridad de copias
-  9. Funciones pendientes
- 10. Módulos instalados
- 11. Habilitar un módulo
- 12. Deshabilitar un módulo
- 13. Diagnóstico de módulos
-  m. Mostrar menú
-  0. Salir"""
+MAX_LOGIN_ATTEMPTS = 3
+CONFIRMATIONS = frozenset({"sí", "si", "s"})
+_EXIT = "salir"
+_EXPIRED = "caducada"
 
 Read = Callable[[str], str]
 Write = Callable[[str], None]
 
 
-def run_terminal(kernel: Kernel, read: Read = input, write: Write = print) -> int:
-    """Bucle principal. Devuelve 0 al salir o al cerrarse la entrada."""
-    write(MENU)
+@dataclass
+class Console:
+    kernel: Kernel
+    read: Read
+    read_secret: Read
+    write: Write
+    token: str = ""
+    username: str = ""
+
+
+@dataclass(frozen=True)
+class Option:
+    key: str
+    label: str
+    permission: str | None
+    critical: bool
+    action: Callable[[Console], None]
+
+
+def run_terminal(
+    kernel: Kernel,
+    read: Read = input,
+    write: Write = print,
+    read_secret: Read = getpass.getpass,
+) -> int:
+    """Bucle principal. Devuelve 0 al salir o al cerrarse la entrada, 1 si no se pudo entrar."""
+    console = Console(kernel=kernel, read=read, read_secret=read_secret, write=write)
+    try:
+        if not kernel.security.has_accounts() and not _bootstrap(console):
+            return 1
+        while True:
+            if not _login(console):
+                write("Demasiados intentos fallidos. Saliendo.")
+                return 1
+            if _session(console) == _EXIT:
+                return 0
+            write("La sesión ha caducado. Inicie sesión de nuevo.")
+    except EOFError:
+        write("")
+        return 0
+
+
+def _bootstrap(console: Console) -> bool:
+    console.write("No hay cuentas en la plataforma. Cree la cuenta de administrador inicial.")
+    username = console.read("Usuario administrador: ").strip()
+    password = console.read_secret("Contraseña: ")
+    confirmation = console.read_secret("Repita la contraseña: ")
+    try:
+        if password != confirmation:
+            raise ValidationError("las contraseñas no coinciden")
+        console.kernel.security.bootstrap_administrator(username, password)
+    except NatxajoError as exc:
+        console.write(f"Error: {exc}")
+        return False
+    console.write(f"Cuenta de administrador creada: {username}")
+    return True
+
+
+def _login(console: Console) -> bool:
+    for _ in range(MAX_LOGIN_ATTEMPTS):
+        username = console.read("Usuario: ").strip()
+        password = console.read_secret("Contraseña: ")
+        try:
+            console.token = console.kernel.security.login(username, password)
+        except NatxajoError as exc:
+            console.write(f"Error: {exc}")
+            continue
+        console.username = username
+        return True
+    return False
+
+
+def _session(console: Console) -> str:
+    _show_menu(console)
     while True:
         try:
-            choice = read("\nSeleccione una opción: ").strip().lower()
+            choice = console.read("\nSeleccione una opción: ").strip().lower()
         except EOFError:
-            write("")
-            return 0
+            console.kernel.security.logout(console.token)
+            return _EXIT
         if choice == "0":
-            return 0
+            console.kernel.security.logout(console.token)
+            return _EXIT
         try:
-            _dispatch(kernel, choice, read, write)
+            _dispatch(console, choice)
+        except SessionError:
+            return _EXPIRED
         except NatxajoError as exc:
-            write(f"Error: {exc}")
+            console.write(f"Error: {exc}")
 
 
-def _dispatch(kernel: Kernel, choice: str, read: Read, write: Write) -> None:
-    actions: dict[str, Callable[[], None]] = {
-        "1": lambda: _show_status(kernel, write),
-        "2": lambda: _show_versions(kernel, write),
-        "3": lambda: _show_detail(kernel, read, write),
-        "4": lambda: _load_version(kernel, read, write),
-        "5": lambda: _rollback(kernel, write),
-        "6": lambda: _show_history(kernel, write),
-        "7": lambda: _show_audit(kernel, write),
-        "8": lambda: _show_integrity(kernel, write),
-        "9": lambda: _show_pending(write),
-        "10": lambda: _show_modules(kernel, write),
-        "11": lambda: _enable_module(kernel, read, write),
-        "12": lambda: _disable_module(kernel, read, write),
-        "13": lambda: _show_module_diagnostics(kernel, write),
-        "m": lambda: write(MENU),
-    }
-    action = actions.get(choice)
-    if action is None:
-        write("Opción no válida")
+def _dispatch(console: Console, choice: str) -> None:
+    if choice == "m":
+        _show_menu(console)
         return
-    action()
+    option = _OPTIONS.get(choice)
+    if option is None:
+        console.write("Opción no válida")
+        return
+    security = console.kernel.security
+    security.sessions.validate(console.token)
+    if option.permission is None:
+        option.action(console)
+        return
+    if not security.authorizer.is_allowed(console.username, option.permission):
+        console.write("Opción no disponible para su cuenta")
+        return
+    if option.critical and not _confirm(console):
+        console.write("Operación cancelada")
+        return
+    security.guard.run(
+        console.token,
+        option.permission,
+        lambda: option.action(console),
+        confirmed=option.critical,
+    )
+
+
+def _confirm(console: Console) -> bool:
+    answer = console.read("¿Confirma la operación? (sí/no): ").strip().lower()
+    return answer in CONFIRMATIONS
+
+
+def _show_menu(console: Console) -> None:
+    security = console.kernel.security
+    lines = ["", "NATXAJO-LOGIN-AUDITOR", f"  Sesión: {console.username}"]
+    for option in _OPTIONS.values():
+        if option.permission is None or security.authorizer.is_allowed(
+            console.username, option.permission
+        ):
+            lines.append(f"{option.key:>3}. {option.label}")
+    lines.append("  m. Mostrar menú")
+    lines.append("  0. Salir")
+    console.write("\n".join(lines))
 
 
 def _show_status(kernel: Kernel, write: Write) -> None:
@@ -209,3 +297,167 @@ def _show_module_diagnostics(kernel: Kernel, write: Write) -> None:
         write(f"- {module_id}: {len(problems)} problema(s)")
         for problem in problems:
             write(f"    {problem}")
+
+
+def _create_account(console: Console) -> None:
+    username = console.read("Usuario nuevo: ").strip()
+    password = console.read_secret("Contraseña: ")
+    confirmation = console.read_secret("Repita la contraseña: ")
+    if password != confirmation:
+        raise ValidationError("las contraseñas no coinciden")
+    roles = [
+        role.strip()
+        for role in console.read("Roles (separados por comas): ").split(",")
+        if role.strip()
+    ]
+    account = console.kernel.security.create_account(username, password, roles)
+    console.write(f"Cuenta creada: {account.username} | roles: {', '.join(account.roles)}")
+
+
+def _request_grant(console: Console) -> None:
+    username = console.read("Usuario que recibirá el permiso: ").strip()
+    permission = console.read("Permiso (subsistema:modulo:recurso:accion): ").strip()
+    minutes_text = console.read("Duración en minutos (1 a 240): ").strip()
+    reason = console.read("Motivo: ").strip()
+    try:
+        minutes = int(minutes_text)
+    except ValueError as exc:
+        raise ValidationError("la duración debe ser un número entero") from exc
+    grant_id = console.kernel.security.grants.request(
+        console.username, username, permission, minutes, reason
+    )
+    console.write(f"Solicitud {grant_id} registrada. Queda pendiente de aprobación.")
+
+
+def _resolve_grant(console: Console) -> None:
+    security = console.kernel.security
+    pending = [grant for grant in security.grants.list_grants() if grant.status == "pending"]
+    if not pending:
+        console.write("No hay solicitudes pendientes")
+        return
+    for grant in pending:
+        console.write(
+            f"- {grant.grant_id} | {grant.username} | {grant.permission} | {grant.minutes} min "
+            f"| {grant.reason} | solicita: {grant.requested_by}"
+        )
+    try:
+        grant_id = int(console.read("Número de solicitud: ").strip())
+    except ValueError as exc:
+        raise ValidationError("el número de solicitud no es válido") from exc
+    decision = console.read("Aprobar (a) o rechazar (r): ").strip().lower()
+    if decision == "a":
+        record = security.grants.approve(console.username, grant_id, security.authorizer.is_allowed)
+        console.write(f"Permiso aprobado hasta: {record.expires_at}")
+    elif decision == "r":
+        security.grants.reject(console.username, grant_id, security.authorizer.is_allowed)
+        console.write("Solicitud rechazada")
+    else:
+        raise ValidationError("decisión no válida: use a o r")
+
+
+def _reauthenticate(console: Console) -> None:
+    password = console.read_secret("Contraseña: ")
+    console.kernel.security.reauthenticate(console.token, password)
+    console.write("Sesión reautenticada")
+
+
+_OPTIONS: dict[str, Option] = {
+    option.key: option
+    for option in (
+        Option(
+            "1",
+            "Estado del sistema",
+            "nucleo:plataforma:estado:leer",
+            False,
+            lambda c: _show_status(c.kernel, c.write),
+        ),
+        Option(
+            "2",
+            "Versiones disponibles",
+            "versiones:nucleo:version:leer",
+            False,
+            lambda c: _show_versions(c.kernel, c.write),
+        ),
+        Option(
+            "3",
+            "Detalle y compatibilidad de una versión",
+            "versiones:nucleo:version:leer",
+            False,
+            lambda c: _show_detail(c.kernel, c.read, c.write),
+        ),
+        Option(
+            "4",
+            "Cargar una versión",
+            "versiones:nucleo:version:ejecutar",
+            True,
+            lambda c: _load_version(c.kernel, c.read, c.write),
+        ),
+        Option(
+            "5",
+            "Revertir a la versión anterior",
+            "versiones:nucleo:version:ejecutar",
+            True,
+            lambda c: _rollback(c.kernel, c.write),
+        ),
+        Option(
+            "6",
+            "Historial de activaciones",
+            "versiones:nucleo:version:leer",
+            False,
+            lambda c: _show_history(c.kernel, c.write),
+        ),
+        Option(
+            "7",
+            "Eventos de auditoría recientes",
+            "auditoria:nucleo:evento:leer",
+            False,
+            lambda c: _show_audit(c.kernel, c.write),
+        ),
+        Option(
+            "8",
+            "Verificar integridad de copias",
+            "almacenamiento:nucleo:copia:leer",
+            False,
+            lambda c: _show_integrity(c.kernel, c.write),
+        ),
+        Option("9", "Funciones pendientes", None, False, lambda c: _show_pending(c.write)),
+        Option(
+            "10",
+            "Módulos instalados",
+            "modulos:nucleo:modulo:leer",
+            False,
+            lambda c: _show_modules(c.kernel, c.write),
+        ),
+        Option(
+            "11",
+            "Habilitar un módulo",
+            "modulos:nucleo:modulo:ejecutar",
+            True,
+            lambda c: _enable_module(c.kernel, c.read, c.write),
+        ),
+        Option(
+            "12",
+            "Deshabilitar un módulo",
+            "modulos:nucleo:modulo:ejecutar",
+            True,
+            lambda c: _disable_module(c.kernel, c.read, c.write),
+        ),
+        Option(
+            "13",
+            "Diagnóstico de módulos",
+            "modulos:nucleo:modulo:leer",
+            False,
+            lambda c: _show_module_diagnostics(c.kernel, c.write),
+        ),
+        Option("14", "Crear cuenta", "seguridad:nucleo:cuenta:administrar", True, _create_account),
+        Option("15", "Solicitar permiso temporal", None, False, _request_grant),
+        Option(
+            "16",
+            "Aprobar o rechazar un permiso temporal",
+            "seguridad:nucleo:permiso:aprobar",
+            True,
+            _resolve_grant,
+        ),
+        Option("17", "Reautenticar la sesión", None, False, _reauthenticate),
+    )
+}

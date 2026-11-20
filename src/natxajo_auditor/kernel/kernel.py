@@ -10,12 +10,15 @@ from typing import Any, cast
 
 from natxajo_auditor import __version__
 from natxajo_auditor.configuration.manager import ConfigurationManager
+from natxajo_auditor.core.utilities import Clock, utc_now
 from natxajo_auditor.kernel.context import RuntimeContext
 from natxajo_auditor.kernel.event_bus import EventBus
 from natxajo_auditor.kernel.lifecycle import Lifecycle, LifecycleState
 from natxajo_auditor.kernel.service_container import ServiceContainer
 from natxajo_auditor.modules.manager import ModuleManager
 from natxajo_auditor.plugins.manager import PluginManager
+from natxajo_auditor.security.passwords import DEFAULT_ITERATIONS, MIN_ITERATIONS
+from natxajo_auditor.security.service import SecurityService
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.backups import BackupManager
 from natxajo_auditor.storage.database import Database
@@ -30,12 +33,24 @@ SERVICE_BACKUPS = "backups"
 SERVICE_MODULES = "modules"
 SERVICE_VERSIONS = "versions"
 SERVICE_PLUGINS = "plugins"
+SERVICE_SECURITY = "security"
 
 
 class Kernel:
-    def __init__(self, context: RuntimeContext, kernel_version: str = __version__) -> None:
+    def __init__(
+        self,
+        context: RuntimeContext,
+        kernel_version: str = __version__,
+        *,
+        password_iterations: int = DEFAULT_ITERATIONS,
+        clock: Clock = utc_now,
+    ) -> None:
+        if password_iterations < MIN_ITERATIONS:
+            raise ValueError(f"password_iterations debe ser al menos {MIN_ITERATIONS}")
         self.context = context
         self.kernel_version = kernel_version
+        self._password_iterations = password_iterations
+        self._clock = clock
         self.services = ServiceContainer()
         self.events = EventBus()
         self._lifecycle = Lifecycle()
@@ -83,6 +98,15 @@ class Kernel:
                     database=database,
                     audit=audit,
                     kernel_version=self.kernel_version,
+                ),
+            )
+            self.services.register(
+                SERVICE_SECURITY,
+                SecurityService(
+                    database=database,
+                    audit=audit,
+                    clock=self._clock,
+                    password_iterations=self._password_iterations,
                 ),
             )
         except Exception:
@@ -136,6 +160,10 @@ class Kernel:
     @property
     def plugins(self) -> PluginManager:
         return cast(PluginManager, self.services.get(SERVICE_PLUGINS))
+
+    @property
+    def security(self) -> SecurityService:
+        return cast(SecurityService, self.services.get(SERVICE_SECURITY))
 
     def _close_services(self) -> None:
         if self.services.has(SERVICE_DATABASE):

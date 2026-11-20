@@ -12,6 +12,8 @@ from natxajo_auditor.plugins.package import build_package
 
 PLUGIN_SECRET = bytes(range(1, 33))
 PLUGIN_KEY_ID = "editor_pruebas"
+ADMIN_USER = "admin_prueba"
+ADMIN_PASSWORD = "contraseña-de-prueba-1"
 
 
 @pytest.fixture
@@ -21,10 +23,18 @@ def context(tmp_path: Path) -> RuntimeContext:
 
 @pytest.fixture
 def kernel(context: RuntimeContext) -> Iterator[Kernel]:
-    instance = Kernel(context)
+    # Coste mínimo de contraseña: las pruebas no necesitan el coste de producción.
+    instance = Kernel(context, password_iterations=1_000)
     instance.start()
     yield instance
     instance.stop()
+
+
+@pytest.fixture
+def admin(kernel: Kernel) -> tuple[str, str]:
+    """Crea la cuenta de administrador de pruebas y devuelve (usuario, contraseña)."""
+    kernel.security.bootstrap_administrator(ADMIN_USER, ADMIN_PASSWORD)
+    return ADMIN_USER, ADMIN_PASSWORD
 
 
 @pytest.fixture

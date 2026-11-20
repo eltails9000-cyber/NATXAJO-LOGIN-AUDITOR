@@ -22,7 +22,7 @@ aparece en el documento maestro.
 | 4 | Gestor de versiones y cargador manual | PARCIAL |
 | 5 | Sistema de módulos y dependencias | VERIFICADO (los módulos no ejecutan código) |
 | 6 | Plugins: firma, integridad, editores, catálogo, revisión y ciclo de vida | PARCIAL |
-| 7 | Seguridad, RBAC, sesiones y guardián de operaciones | PENDIENTE |
+| 7 | Seguridad, RBAC, sesiones y guardián de operaciones | PARCIAL |
 | 8 | Motor de automatización | PENDIENTE |
 | 9 | Motor de auditoría defensiva | PENDIENTE |
 | 10 | Aplicación de escritorio y terminal avanzada | PENDIENTE |
@@ -30,7 +30,7 @@ aparece en el documento maestro.
 | 12 | Mantenimiento, actualizaciones y recuperación | PENDIENTE |
 | 13 | Pruebas integrales y distribución | PENDIENTE |
 
-Pruebas automatizadas: 161 casos, con ruff y mypy en modo estricto sin errores.
+Pruebas automatizadas: 213 casos, con ruff y mypy en modo estricto sin errores.
 
 ## Fase 3: configuración y almacenamiento (PARCIAL)
 
@@ -56,8 +56,8 @@ Pruebas automatizadas: 161 casos, con ruff y mypy en modo estricto sin errores.
   que aísla los módulos rotos, dependencias con detección de ausencias y ciclos, habilitación que
   activa antes las dependencias, deshabilitación protegida, estado persistente auditado y
   diagnóstico.
-- **Pendiente:** ejecución de módulos (sin fase asignada), aplicación de permisos (depende de la
-  fase 7), actualización y desinstalación.
+- **Pendiente:** ejecución de módulos (sin fase asignada), aplicación de los permisos declarados a
+  la ejecución de módulos (depende de que exista ejecución), actualización y desinstalación.
 
 ## Fase 6: plugins (PARCIAL)
 
@@ -96,16 +96,51 @@ Pruebas automatizadas: 161 casos, con ruff y mypy en modo estricto sin errores.
 - **Actualización de versiones.** Un plugin tiene una única versión instalada. Para cambiarla hay
   que desinstalarla primero.
 - **Terminal.** No hay opciones de menú para plugins. Se gestionan desde la API del núcleo
-  (`kernel.plugins`). Las opciones llegarán con el control de acceso de la fase 7.
+  (`kernel.plugins`). El control de acceso de la fase 7 ya existe, así que las opciones pueden
+  añadirse protegidas por permiso.
 - **Revisión automática.** El inventario clasifica por extensión. No detecta código malicioso ni
   sustituye la revisión humana.
 
-## Fase 7: seguridad y RBAC (PENDIENTE)
+## Fase 7: seguridad y RBAC (PARCIAL)
 
-Cuentas, roles, sesiones, permisos temporales y guardián de operaciones críticas. Hasta que exista,
-cualquiera con acceso al equipo puede habilitar cualquier módulo o plugin instalado. Los permisos
-declarados por módulos y plugins se validan en el formato `subsistema:modulo:recurso:accion`, pero no
-se aplican.
+### Verificado
+
+- **Cuentas y contraseñas:** PBKDF2-HMAC-SHA256 con sal de 16 bytes, política de contraseñas,
+  bloqueo tras 5 fallos durante 15 minutos, y mensaje de error idéntico para usuario inexistente o
+  contraseña incorrecta.
+- **Sesiones:** ficha de 256 bits guardada como hash, caducidad por inactividad (15 minutos) y
+  absoluta (8 horas), límite de 3 sesiones por cuenta, cierre y reautenticación.
+- **Roles:** builtin `administrador`, `operador` y `auditor`; separación de funciones entre
+  `operador` y `auditor`; herencia de hasta 5 niveles; un rol nuevo no puede conceder más de lo que
+  posee quien lo crea.
+- **Último administrador:** no puede deshabilitarse ni perder el rol de administrador.
+- **Permisos temporales:** solicitud de 1 a 240 minutos, aprobación por otra cuenta que posea el
+  permiso concedido, sin autoaprobación, rechazo, revocación y caducidad.
+- **Guardián de operaciones:** comprueba sesión, permiso, confirmación y reautenticación reciente
+  para las operaciones críticas; registra denegaciones y ejecuciones en la auditoría.
+- **Terminal:** creación del primer administrador, inicio de sesión con tres intentos, caducidad que
+  vuelve a la pantalla de inicio, menú filtrado por permisos, confirmación y reautenticación para las
+  opciones críticas. Opciones 14 a 17: crear cuenta, solicitar permiso temporal, aprobar o rechazar
+  permiso temporal, y reautenticar.
+- **Migración 5:** tablas `accounts`, `roles`, `role_grants`, `role_parents`, `account_roles`,
+  `permission_grants` y `sessions`.
+- **Pruebas:** 39 casos en `tests/test_security.py`, más las pruebas de terminal.
+
+### Pendiente
+
+- **Gestión desde la terminal.** Revocar permisos, deshabilitar cuentas, cambiar roles y cambiar
+  contraseñas solo están en la API (`kernel.security`).
+- **Recuperación de acceso.** No hay recuperación de contraseñas, borrado de cuentas ni desbloqueo
+  manual.
+- **Integridad de la auditoría.** Los eventos no están encadenados ni firmados.
+- **Cifrado.** La base de datos y las copias están en texto plano; solo las contraseñas van como
+  hash.
+- **Aplicación de permisos a módulos y plugins.** Los permisos que declaran se validan en el formato
+  `subsistema:modulo:recurso:accion`, pero no se aplican porque no existe ejecución de módulos ni
+  plugins.
+- **Multiempresa.** No hay separación entre empresas, aplicaciones ni entornos.
+
+Detalle de límites y de qué protege cada control: `docs/seguridad.md`.
 
 ## Otros pendientes
 

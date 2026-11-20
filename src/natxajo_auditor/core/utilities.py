@@ -5,8 +5,16 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+
+Clock = Callable[[], datetime]
+
+
+def utc_now() -> datetime:
+    """Instante actual con zona horaria UTC. Es el reloj por defecto del núcleo."""
+    return datetime.now(UTC)
 
 
 def utc_stamp() -> str:
@@ -17,6 +25,17 @@ def utc_stamp() -> str:
 def utc_iso() -> str:
     """Marca UTC en formato ISO 8601."""
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def to_iso(moment: datetime) -> str:
+    """Texto ISO 8601 en UTC, en segundos. Así las comparaciones de texto y de instante coinciden."""
+    if moment.tzinfo is None:
+        raise ValueError("el instante debe tener zona horaria")
+    return moment.astimezone(UTC).isoformat(timespec="seconds")
+
+
+def from_iso(text: str | None) -> datetime | None:
+    return None if text is None else datetime.fromisoformat(text)
 
 
 def sha256_file(path: Path) -> str:

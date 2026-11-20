@@ -98,6 +98,80 @@ MIGRATIONS: tuple[Migration, ...] = (
             """,
         ),
     ),
+    Migration(
+        version=5,
+        name="seguridad",
+        statements=(
+            """
+            CREATE TABLE accounts (
+                username TEXT PRIMARY KEY CHECK (length(username) BETWEEN 3 AND 40),
+                password_hash TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('active', 'disabled')),
+                failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
+                locked_until TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE roles (
+                name TEXT PRIMARY KEY,
+                builtin INTEGER NOT NULL CHECK (builtin IN (0, 1)),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE role_grants (
+                role_name TEXT NOT NULL REFERENCES roles (name) ON DELETE CASCADE,
+                permission TEXT NOT NULL,
+                PRIMARY KEY (role_name, permission)
+            )
+            """,
+            """
+            CREATE TABLE role_parents (
+                role_name TEXT NOT NULL REFERENCES roles (name) ON DELETE CASCADE,
+                parent_name TEXT NOT NULL REFERENCES roles (name) ON DELETE CASCADE,
+                PRIMARY KEY (role_name, parent_name)
+            )
+            """,
+            """
+            CREATE TABLE account_roles (
+                username TEXT NOT NULL REFERENCES accounts (username) ON DELETE CASCADE,
+                role_name TEXT NOT NULL REFERENCES roles (name) ON DELETE CASCADE,
+                PRIMARY KEY (username, role_name)
+            )
+            """,
+            """
+            CREATE TABLE permission_grants (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL REFERENCES accounts (username) ON DELETE CASCADE,
+                permission TEXT NOT NULL,
+                minutes INTEGER NOT NULL CHECK (minutes BETWEEN 1 AND 240),
+                reason TEXT NOT NULL,
+                requested_by TEXT NOT NULL,
+                approved_by TEXT,
+                status TEXT NOT NULL CHECK (
+                    status IN ('pending', 'active', 'rejected', 'revoked')
+                ),
+                expires_at TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token_hash TEXT NOT NULL UNIQUE,
+                username TEXT NOT NULL REFERENCES accounts (username) ON DELETE CASCADE,
+                created_at TEXT NOT NULL,
+                last_activity TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                reauth_at TEXT,
+                revoked_at TEXT
+            )
+            """,
+        ),
+    ),
 )
 
 _BOOKKEEPING = (
