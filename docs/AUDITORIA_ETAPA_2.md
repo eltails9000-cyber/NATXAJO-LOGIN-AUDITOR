@@ -212,7 +212,7 @@ corren solo en Linux, y el lanzador nunca se ha ejecutado. Para verificarlo, sig
 |---|---|---|
 | `python -m pytest` | 262 aprobadas | 279 aprobadas (262 originales sin cambios + 17 nuevas) |
 | `ruff check .` | Sin errores | Sin errores |
-| `ruff format --check .` | 87 archivos | 88 archivos, sin cambios pendientes |
+| `ruff format --check .` | Sin cambios pendientes | Sin cambios pendientes |
 | `mypy --strict src` | Sin errores (60 archivos) | Sin errores (60 archivos) |
 
 Las pruebas de regresión: 14 fallaban antes de corregir, 3 son de comportamiento normal y
