@@ -40,7 +40,8 @@ Estos límites vienen del documento maestro y no se relajan:
   dura, cualquier intento, también con la contraseña correcta, recibe el mismo mensaje que una
   contraseña incorrecta y queda en la auditoría como `account.login_blocked`. Un usuario inexistente
   recibe ese mismo mensaje y realiza el mismo cálculo, así que la respuesta no revela qué cuentas
-  existen.
+  existen. El contador y el bloqueo se leen y se escriben en una misma transacción: dos intentos
+  simultáneos cuentan los dos, y un acierto no salta un bloqueo fijado durante su verificación.
 - **Roles y separación de funciones.** Roles integrados `administrador`, `operador` y `auditor`.
   Ninguna cuenta puede tener a la vez `operador` y `auditor`. Un rol nuevo solo puede conceder
   permisos que posea quien lo crea, y la herencia admite como máximo 5 niveles.
@@ -55,13 +56,31 @@ Estos límites vienen del documento maestro y no se relajan:
   minutos anteriores a la operación.
 - **Permisos temporales.** Una cuenta solicita un permiso para 1 a 240 minutos. Lo aprueba otra
   cuenta que tenga `seguridad:nucleo:permiso:aprobar` y que también posea el permiso concedido.
-  Nadie aprueba su propia solicitud. Al caducar, el permiso deja de aplicarse.
+  Nadie aprueba su propia solicitud. Al caducar, el permiso deja de aplicarse. Aprobar, rechazar o
+  revocar es una transición condicionada: una solicitud no se resuelve dos veces, ni una rechazada
+  pasa a activa.
 - **Guardián de operaciones.** Toda acción de la plataforma pasa por el guardián: sesión válida,
   permiso requerido y, en las operaciones críticas (`CRITICAL_PERMISSIONS` en
   `security/guard.py`), confirmación explícita y reautenticación reciente. Las denegaciones y las
-  ejecuciones quedan en la auditoría como `operation.denied` y `operation.executed`.
+  ejecuciones quedan en la auditoría como `operation.denied` y `operation.executed`. Una operación
+  sin empresa indicada es de plataforma: una cuenta de empresa no la ejecuta aunque tenga el permiso.
 - **Menú filtrado.** La terminal solo muestra las opciones que la cuenta puede usar. Una opción
   no permitida se rechaza igualmente si se introduce a mano.
+- **Empresas.** Cada cuenta pertenece a una empresa, fijada al crearla y protegida por disparadores.
+  El guardián comprueba el ámbito antes de pedir confirmación: una cuenta de empresa no actúa sobre
+  otra empresa, aunque tenga el permiso. Las solicitudes de permisos temporales se comprueban igual.
+  La terminal filtra la auditoría y las solicitudes por empresa.
+- **Instalador.** El primer administrador se crea con un código de 128 bits, que se muestra una vez,
+  se guarda como hash PBKDF2, caduca a los 30 minutos y admite cinco intentos como máximo. Completada
+  la instalación, un disparador impide reabrirla.
+- **Bus de eventos y auditoría.** Solo se registran eventos del catálogo cerrado, con su categoría
+  (`operativo` o `seguridad`) y sin claves con apariencia de secreto. Un evento se guarda en la misma
+  transacción que el cambio y se entrega después. Los fallos se reintentan y no se pierden. Cada
+  consumidor se ejecuta bajo un autorizador de SQLite: puede leer y escribir en tablas que no son de
+  la plataforma; no puede tocar cuentas, sesiones, permisos, instalación ni el propio bus; la
+  auditoría admite solo inserciones, y solo del consumidor de auditoría. Un consumidor que intente
+  otra cosa falla y se reintenta hasta la cola de fallidos. Límite: la lista de tablas protegidas es
+  manual, y el autorizador se ha comprobado en Linux, no en Windows.
 
 ## Qué NO está implementado
 
@@ -73,17 +92,25 @@ Estos límites vienen del documento maestro y no se relajan:
 - **Ejecución de plugins.** Habilitar un plugin solo registra su estado. No hay procesos separados
   ni límites de recursos. Cuando exista ejecución, se documentará el aislamiento real del sistema
   operativo que se aplica.
-- **Multiempresa.** No hay separación entre empresas, aplicaciones ni entornos. Todas las cuentas
-  comparten una base de datos, un almacenamiento y un conjunto de versiones.
+- **Multiempresa (parcial).** Las empresas no tienen aplicaciones ni entornos propios: comparten la
+  base de datos, el almacenamiento y el conjunto de versiones de la plataforma. La API interna del
+  kernel, sin token, no comprueba el ámbito; esa comprobación llega con la etapa 8. Los detalles
+  están en `docs/AUDITORIA_ETAPA_2.md`, sección 5 (P-01): una API sin token puede crear
+  administradores, cambiar contraseñas sin la anterior y activar versiones. La terminal no la usa sin
+  el guardián. Dentro de un mismo proceso, ninguna API interna es una frontera de seguridad: la
+  frontera real llegará con la ejecución de módulos o plugins en un proceso separado (etapa 8).
 - **Cifrado de datos sensibles.** La base de datos y las copias están en texto plano. Solo las
   contraseñas se guardan como hash; cuentas, roles, sesiones y auditoría no están cifrados.
 - **Integridad de la auditoría.** Los eventos no están encadenados ni firmados. Quien pueda escribir
   en la base de datos puede alterarlos sin que se detecte.
-- **Primer administrador.** Quien use la terminal antes de que exista la primera cuenta puede crear
-  el administrador. Ninguna comprobación externa lo impide.
-- **Gestión de cuentas desde la terminal.** La terminal permite crear cuentas y solicitar, aprobar
-  o rechazar permisos temporales. Revocar permisos, deshabilitar cuentas, cambiar roles y cambiar
-  contraseñas solo están en la API (`kernel.security`).
+- **Primer administrador.** El código de instalación se muestra en la misma terminal. Quien pueda
+  ver esa terminal durante la instalación puede completarla. No hay un canal externo para entregar el
+  código. El límite de cinco intentos es por código: cada ejecución emite uno nuevo. La protección
+  contra la adivinación es la entropía del código (128 bits).
+- **Gestión de cuentas desde la terminal.** La terminal permite crear cuentas en la empresa de la
+  sesión, crear y listar empresas (solo la plataforma), y solicitar, aprobar o rechazar permisos
+  temporales dentro del ámbito de la empresa. Revocar permisos, deshabilitar cuentas, cambiar roles
+  y cambiar contraseñas solo están en la API (`kernel.security`).
 - **Recuperación de acceso.** No hay recuperación de contraseñas ni borrado de cuentas. Una cuenta
   solo se deshabilita.
 - **Desbloqueo.** No hay desbloqueo manual. Una cuenta bloqueada vuelve a estar disponible cuando

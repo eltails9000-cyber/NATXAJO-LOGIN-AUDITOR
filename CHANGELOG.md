@@ -2,6 +2,41 @@
 
 ## [Sin publicar]
 
+- Auditoría posterior a la etapa 2 (`docs/AUDITORIA_ETAPA_2.md`):
+  - Corregido: el guardián no comprobaba el ámbito de empresa cuando una operación no indicaba
+    empresa. Ahora una operación sin empresa es de plataforma.
+  - Corregido: el contador de fallos y el bloqueo se deciden dentro de la transacción de escritura.
+    Un acierto ya no salta un bloqueo fijado durante la verificación.
+  - Corregido: aprobar, rechazar y revocar un permiso temporal es una transición condicionada. Una
+    solicitud no puede resolverse dos veces.
+  - Corregido: el límite de sesiones simultáneas se comprueba dentro de la transacción de escritura.
+  - Corregido: la comprobación de entrega del bus se hace dentro de la transacción del consumidor.
+  - Nuevo: un consumidor se ejecuta bajo un autorizador de SQLite. No puede escribir en tablas de la
+    plataforma, ni editar o borrar la auditoría, ni cambiar el esquema.
+  - Pruebas: 279 casos (262 existentes sin cambios y 17 nuevas).
+  - Pendiente: la API interna del núcleo sin token (P-01), la espera entre reintentos del bus y la
+    comprobación de la versión de SQLite antes de revertir migraciones.
+
+- Etapa 2 de la especificación, dentro de la fase 7:
+  - Multiempresa: tabla `companies` con la empresa `plataforma`. Cada cuenta tiene `company_id`,
+    fijado al crearla y protegido por disparadores. El ámbito se comprueba en el guardián, en los
+    permisos temporales, en la auditoría y en la terminal.
+  - Terminal: opciones 18 (crear empresa) y 19 (listar empresas), solo para la plataforma. La
+    auditoría y las solicitudes de permisos se filtran por empresa.
+  - Instalador del primer administrador con código de un solo uso: hash PBKDF2, caducidad de 30
+    minutos, cinco intentos y cierre permanente por disparador.
+  - Bus de eventos: catálogo tipado de 34 eventos, outbox transaccional, consumidores idempotentes,
+    reintentos, cola de fallidos y reenvío al arrancar. La auditoría es un consumidor. Las categorías
+    `operativo` y `seguridad` se guardan por separado.
+  - Migraciones 6 a 8, reversibles. Antes de migrar una base existente se guarda una copia en
+    `storage/migraciones/`. Plan y resultados en `docs/MIGRACION_ETAPA_2.md`.
+  - Corrección de la etapa 2: los cambios de estado, contraseña y roles de cuentas, y las
+    reautenticaciones y caducidades de sesión, se escriben y auditan en una transacción.
+  - 262 casos de prueba automatizados (214 existentes y 48 nuevas), con ruff y mypy en modo estricto
+    sin errores.
+- Cambio incompatible: `SecurityService.bootstrap_administrator` se elimina. El primer administrador
+  se crea con el instalador. `AuditLog.record` solo acepta eventos del catálogo y sus claves
+  declaradas; un nombre desconocido se rechaza.
 - Corrección de seguridad: durante un bloqueo de cuenta, la respuesta ya no revela que la cuenta
   existe. Los intentos bloqueados quedan en la auditoría como `account.login_blocked`.
 - Auditoría de arquitectura en `docs/CLAUDE_ARCHITECTURE_AUDIT.md`, con plan de corrección por etapas.

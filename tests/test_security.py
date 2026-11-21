@@ -15,7 +15,7 @@ from natxajo_auditor.security.passwords import hash_password, validate_policy, v
 from natxajo_auditor.security.permissions import parse_permission
 from natxajo_auditor.security.sessions import SessionError
 from natxajo_auditor.storage.database import Database
-from tests.conftest import ADMIN_PASSWORD, ADMIN_USER
+from tests.conftest import ADMIN_PASSWORD, ADMIN_USER, install_administrator
 
 PASSWORD = "contraseña-de-prueba-1"
 ALT_PASSWORD = "otra-contraseña-de-prueba"
@@ -49,7 +49,7 @@ def secure(context: RuntimeContext, clock: FakeClock) -> Iterator[Kernel]:
 
 
 def _bootstrap(kernel: Kernel) -> None:
-    kernel.security.bootstrap_administrator(ADMIN_USER, ADMIN_PASSWORD)
+    install_administrator(kernel)
 
 
 def _database(kernel: Kernel) -> Database:
