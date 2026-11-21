@@ -14,7 +14,7 @@ import re
 import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from natxajo_auditor.core.exceptions import AuthorizationError, ValidationError
 from natxajo_auditor.core.utilities import Clock, from_iso, to_iso
@@ -32,6 +32,9 @@ ACTIVE = "active"
 DISABLED = "disabled"
 PENDING_INSTALLATION = "pending"
 _DUMMY_PASSWORD = "contraseña-ficticia-para-igualar-tiempos"
+_ACCEPTED = "aceptada"
+_REJECTED = "rechazada"
+_DISABLED = "deshabilitada"
 
 
 @dataclass(frozen=True)
@@ -175,26 +178,47 @@ class AccountStore:
         """Comprueba la contraseña, aplica el bloqueo y devuelve la cuenta si todo es correcto."""
         now = self._clock()
         rows = self._database.fetchall(
-            "SELECT password_hash, status, failed_attempts, locked_until "
-            "FROM accounts WHERE username = ?",
-            (username,),
+            "SELECT password_hash FROM accounts WHERE username = ?", (username,)
         )
         if not rows:
             # Mismo coste que una cuenta real, para no revelar qué usuarios existen.
             verify_password(password, self._dummy())
             raise AuthorizationError(INVALID_CREDENTIALS)
-        stored_hash, status, failed_text, locked_text = rows[0]
-        locked_until = from_iso(None if locked_text is None else str(locked_text))
-        if locked_until is not None and locked_until > now:
-            # Mismo coste y mismo mensaje que una contraseña incorrecta: el bloqueo no revela
-            # que la cuenta existe. Tampoco entra la contraseña correcta mientras dura.
-            verify_password(password, str(stored_hash))
-            self._audit.record("account.login_blocked", {"username": username})
+        # La contraseña se verifica siempre, también durante un bloqueo, con el mismo coste.
+        verified = verify_password(password, str(rows[0][0]))
+        outcome = self._register_attempt(username, verified, now)
+        if outcome == _DISABLED:
+            raise AuthorizationError("cuenta deshabilitada")
+        if outcome != _ACCEPTED:
             raise AuthorizationError(INVALID_CREDENTIALS)
-        if not verify_password(password, str(stored_hash)):
-            failed = int(failed_text) + 1
-            locked = failed >= MAX_FAILED_ATTEMPTS
-            with self._database.transaction() as connection:
+        return self.get(username)
+
+    def _register_attempt(self, username: str, verified: bool, now: datetime) -> str:
+        """Decide el intento y lo registra dentro de una transacción de escritura.
+
+        Leer el contador y el bloqueo dentro de la misma transacción evita que dos intentos
+        solapados pierdan incrementos, o que un acierto salte un bloqueo que otro intento acaba
+        de fijar. Los errores se devuelven y se lanzan fuera de la transacción: si no, se
+        revertiría el registro del intento.
+        """
+        with self._database.transaction() as connection:
+            row = connection.execute(
+                "SELECT status, failed_attempts, locked_until FROM accounts WHERE username = ?",
+                (username,),
+            ).fetchone()
+            if row is None:
+                return _REJECTED
+            status, failed_text, locked_text = row
+            locked_until = from_iso(None if locked_text is None else str(locked_text))
+            if locked_until is not None and locked_until > now:
+                # Mismo mensaje que una contraseña incorrecta: el bloqueo no revela la cuenta.
+                self._audit.record(
+                    "account.login_blocked", {"username": username}, connection=connection
+                )
+                return _REJECTED
+            if not verified:
+                failed = int(failed_text) + 1
+                locked = failed >= MAX_FAILED_ATTEMPTS
                 connection.execute(
                     "UPDATE accounts SET failed_attempts = ?, locked_until = ?, "
                     "updated_at = CURRENT_TIMESTAMP WHERE username = ?",
@@ -205,17 +229,18 @@ class AccountStore:
                     {"username": username, "locked": locked},
                     connection=connection,
                 )
-            # Se lanza fuera de la transacción: si no, el contador de fallos se revertiría.
-            raise AuthorizationError(INVALID_CREDENTIALS)
-        self._database.execute(
-            "UPDATE accounts SET failed_attempts = 0, locked_until = NULL, "
-            "updated_at = CURRENT_TIMESTAMP WHERE username = ?",
-            (username,),
-        )
-        if str(status) != ACTIVE:
-            raise AuthorizationError("cuenta deshabilitada")
-        self._audit.record("account.authenticated", {"username": username})
-        return self.get(username)
+                return _REJECTED
+            connection.execute(
+                "UPDATE accounts SET failed_attempts = 0, locked_until = NULL, "
+                "updated_at = CURRENT_TIMESTAMP WHERE username = ?",
+                (username,),
+            )
+            if str(status) != ACTIVE:
+                return _DISABLED
+            self._audit.record(
+                "account.authenticated", {"username": username}, connection=connection
+            )
+            return _ACCEPTED
 
     def set_status(self, username: str, status: str) -> None:
         if status not in (ACTIVE, DISABLED):

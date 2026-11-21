@@ -92,11 +92,15 @@ class GrantStore:
             )
         expires = self._clock() + timedelta(minutes=record.minutes)
         with self._database.transaction() as connection:
-            connection.execute(
+            # La condición de estado va en la propia escritura: si otra operación ya resolvió la
+            # solicitud, no se escribe nada y la transacción se revierte.
+            cursor = connection.execute(
                 "UPDATE permission_grants SET status = ?, approved_by = ?, expires_at = ?, "
-                "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (ACTIVE, approver, to_iso(expires), grant_id),
+                "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = ?",
+                (ACTIVE, approver, to_iso(expires), grant_id, PENDING),
             )
+            if cursor.rowcount != 1:
+                raise ValidationError(f"la solicitud {grant_id} ya no está pendiente")
             self._audit.record(
                 "grant.approved",
                 {"grant": grant_id, "approver": approver, "permission": record.permission},
@@ -113,7 +117,7 @@ class GrantStore:
         self._require_scope(actor, target_company)
         if actor != record.requested_by and not can(actor, APPROVE_PERMISSION):
             raise AuthorizationError("no tiene permiso para rechazar solicitudes")
-        self._set_status(grant_id, REJECTED, actor, "grant.rejected", target_company)
+        self._set_status(grant_id, PENDING, REJECTED, actor, "grant.rejected", target_company)
         return self.get(grant_id)
 
     def revoke(self, actor: str, grant_id: int, can: Can) -> GrantRecord:
@@ -124,7 +128,7 @@ class GrantStore:
         self._require_scope(actor, target_company)
         if not can(actor, REVOKE_PERMISSION):
             raise AuthorizationError("no tiene permiso para revocar permisos temporales")
-        self._set_status(grant_id, REVOKED, actor, "grant.revoked", target_company)
+        self._set_status(grant_id, ACTIVE, REVOKED, actor, "grant.revoked", target_company)
         return self.get(grant_id)
 
     def get(self, grant_id: int) -> GrantRecord:
@@ -183,14 +187,25 @@ class GrantStore:
         return str(rows[0][0]) if rows else None
 
     def _set_status(
-        self, grant_id: int, status: str, actor: str, event: str, company_id: str
+        self,
+        grant_id: int,
+        expected: str,
+        status: str,
+        actor: str,
+        event: str,
+        company_id: str,
     ) -> None:
+        """Cambia el estado solo si la solicitud sigue en `expected`. Si no, se revierte todo."""
         with self._database.transaction() as connection:
-            connection.execute(
+            cursor = connection.execute(
                 "UPDATE permission_grants SET status = ?, updated_at = CURRENT_TIMESTAMP "
-                "WHERE id = ?",
-                (status, grant_id),
+                "WHERE id = ? AND status = ?",
+                (status, grant_id, expected),
             )
+            if cursor.rowcount != 1:
+                raise ValidationError(
+                    f"la solicitud {grant_id} cambió de estado; repita la operación"
+                )
             self._audit.record(
                 event,
                 {"grant": grant_id, "actor": actor},

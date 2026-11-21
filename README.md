@@ -19,7 +19,15 @@ python main.py            # menú interactivo
 python main.py --version  # muestra la versión y sale
 ```
 
-En Windows también puede usarse `.\launcher.ps1`, que busca un Python 3.11 o posterior.
+En Windows también puede usarse `.\launcher.ps1`, que busca un Python 3.11 o posterior. Con la
+política de ejecución por defecto de Windows, el script no se ejecuta; use:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher.ps1
+```
+
+El lanzador no se ha ejecutado todavía en Windows. El procedimiento de prueba está en
+`docs/PRUEBAS_WINDOWS.md`.
 
 Los datos de ejecución (`config/`, `storage/`) se crean en la carpeta del proyecto la primera vez y no se versionan.
 

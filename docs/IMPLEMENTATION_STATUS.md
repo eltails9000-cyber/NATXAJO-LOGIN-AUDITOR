@@ -39,8 +39,10 @@ aparece en el documento maestro.
 | 12 | Mantenimiento, actualizaciones y recuperación | PENDIENTE |
 | 13 | Pruebas integrales y distribución | PENDIENTE |
 
-Pruebas automatizadas: 262 casos (214 de la etapa 1, de las que 4 cambiaron de procedimiento o de
-expectativa, y 48 nuevas de la etapa 2), con ruff y mypy en modo estricto sin errores.
+Pruebas automatizadas: 279 casos (214 de la etapa 1, de las que 4 cambiaron de procedimiento o de
+expectativa; 48 nuevas de la etapa 2; y 17 de la auditoría posterior a la etapa 2, en
+`tests/test_auditoria_postimplementacion.py`), con ruff y mypy en modo estricto sin errores.
+Verificadas en Linux. Windows no está verificado (ver `docs/PRUEBAS_WINDOWS.md`).
 
 ## Fase 3: configuración y almacenamiento (PARCIAL)
 
@@ -186,6 +188,15 @@ expectativa, y 48 nuevas de la etapa 2), con ruff y mypy en modo estricto sin er
   no la muestra ni la reencola.
 
 Detalle de límites y de qué protege cada control: `docs/seguridad.md`.
+
+## Auditoría posterior a la etapa 2
+
+`docs/AUDITORIA_ETAPA_2.md` revisa el commit `9a371c7`. Corregidos siete defectos con pruebas de
+regresión: el guardián sin empresa (A-01), el contador de fallos y el bloqueo bajo concurrencia
+(A-02, A-03), la doble resolución de permisos temporales (A-04), el límite de sesiones (A-05), la
+doble entrega del bus (A-06) y los permisos de los consumidores (A-07). Abierto: P-01, la API
+interna del núcleo sin token. Riesgo aceptado hasta la etapa 8, y condición para ejecutar módulos o
+plugins. Windows no está verificado.
 
 ## Auditoría de arquitectura (etapa 1)
 

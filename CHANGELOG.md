@@ -2,6 +2,21 @@
 
 ## [Sin publicar]
 
+- Auditoría posterior a la etapa 2 (`docs/AUDITORIA_ETAPA_2.md`):
+  - Corregido: el guardián no comprobaba el ámbito de empresa cuando una operación no indicaba
+    empresa. Ahora una operación sin empresa es de plataforma.
+  - Corregido: el contador de fallos y el bloqueo se deciden dentro de la transacción de escritura.
+    Un acierto ya no salta un bloqueo fijado durante la verificación.
+  - Corregido: aprobar, rechazar y revocar un permiso temporal es una transición condicionada. Una
+    solicitud no puede resolverse dos veces.
+  - Corregido: el límite de sesiones simultáneas se comprueba dentro de la transacción de escritura.
+  - Corregido: la comprobación de entrega del bus se hace dentro de la transacción del consumidor.
+  - Nuevo: un consumidor se ejecuta bajo un autorizador de SQLite. No puede escribir en tablas de la
+    plataforma, ni editar o borrar la auditoría, ni cambiar el esquema.
+  - Pruebas: 279 casos (262 existentes sin cambios y 17 nuevas).
+  - Pendiente: la API interna del núcleo sin token (P-01), la espera entre reintentos del bus y la
+    comprobación de la versión de SQLite antes de revertir migraciones.
+
 - Etapa 2 de la especificación, dentro de la fase 7:
   - Multiempresa: tabla `companies` con la empresa `plataforma`. Cada cuenta tiene `company_id`,
     fijado al crearla y protegido por disparadores. El ámbito se comprueba en el guardián, en los

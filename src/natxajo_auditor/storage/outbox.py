@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -35,9 +35,84 @@ PENDING = "pending"
 DELIVERED = "delivered"
 DEAD = "dead"
 
+# Tablas de la plataforma que ningún consumidor puede escribir: contabilidad del bus, cuentas,
+# sesiones, permisos, instalación, versiones y módulos. Una tabla nueva de la plataforma debe
+# añadirse aquí. La auditoría tiene regla propia (AUDIT_TABLE).
+PROTECTED_TABLES = frozenset(
+    {
+        "account_roles",
+        "accounts",
+        "companies",
+        "event_deliveries",
+        "event_outbox",
+        "installation",
+        "module_states",
+        "permission_grants",
+        "platform_metadata",
+        "plugin_installs",
+        "plugin_publishers",
+        "plugin_reviews",
+        "role_grants",
+        "role_parents",
+        "roles",
+        "schema_migrations",
+        "sessions",
+    }
+)
+AUDIT_TABLE = "audit_events"
+
+# Acciones de SQLite que un consumidor puede ejecutar. Cualquier otra (DDL, PRAGMA, ATTACH...) se
+# deniega: un consumidor no cambia el esquema ni la configuración de la base de datos.
+_ALLOWED_ACTIONS = frozenset(
+    {
+        sqlite3.SQLITE_SELECT,
+        sqlite3.SQLITE_READ,
+        sqlite3.SQLITE_FUNCTION,
+        sqlite3.SQLITE_RECURSIVE,
+        sqlite3.SQLITE_INSERT,
+        sqlite3.SQLITE_UPDATE,
+        sqlite3.SQLITE_DELETE,
+        sqlite3.SQLITE_SAVEPOINT,
+    }
+)
+_WRITE_ACTIONS = frozenset({sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE, sqlite3.SQLITE_DELETE})
+
+SqliteAuthorizer = Callable[[int, str | None, str | None, str | None, str | None], int]
+
+
+def _consumer_policy(writes_audit: bool) -> SqliteAuthorizer:
+    """Autorizador de SQLite para ejecutar un consumidor.
+
+    Un consumidor puede leer, y escribir en tablas que no son de la plataforma. La auditoría
+    solo admite inserciones, y solo al consumidor que la escribe (`writes_audit`): ni se edita
+    ni se borra el historial.
+    """
+
+    def policy(
+        action: int,
+        table: str | None,
+        _column: str | None,
+        _database: str | None,
+        _trigger: str | None,
+    ) -> int:
+        if action not in _ALLOWED_ACTIONS:
+            return sqlite3.SQLITE_DENY
+        if action in _WRITE_ACTIONS and table is not None:
+            if table in PROTECTED_TABLES:
+                return sqlite3.SQLITE_DENY
+            if table == AUDIT_TABLE and (action != sqlite3.SQLITE_INSERT or not writes_audit):
+                return sqlite3.SQLITE_DENY
+        return sqlite3.SQLITE_OK
+
+    return policy
+
 
 class Consumer(Protocol):
-    """Consumidor de eventos. handle debe escribir solo a través de la conexión recibida."""
+    """Consumidor de eventos. handle escribe solo a través de la conexión recibida.
+
+    Un consumidor que escriba en la auditoría declara `writes_audit = True`. Cualquier otra
+    escritura sobre las tablas de la plataforma se rechaza con el autorizador de `_consumer_policy`.
+    """
 
     name: str
 
@@ -164,11 +239,16 @@ class EventOutbox:
     def _deliver(self, event: Event) -> tuple[str, Exception] | None:
         """Entrega el evento a los consumidores pendientes. Devuelve el primer fallo, si lo hay."""
         for consumer in self._consumers.values():
-            if not consumer.accepts(event) or self._delivered_to(event.event_id, consumer.name):
+            if not consumer.accepts(event):
                 continue
             try:
                 with self._database.transaction() as connection:
-                    consumer.handle(event, connection)
+                    # La comprobación va dentro de la transacción de escritura: otro despachador
+                    # que confirme esta entrega antes de que empiece esta transacción la hace
+                    # visible aquí, y el consumidor no se ejecuta dos veces.
+                    if self._delivered_to(event.event_id, consumer.name):
+                        continue
+                    _run_consumer(consumer, event, connection)
                     connection.execute(
                         "INSERT OR IGNORE INTO event_deliveries (event_id, consumer, delivered_at) "
                         "VALUES (?, ?, ?)",
@@ -199,6 +279,15 @@ class EventOutbox:
             (attempts, message, status, event_id),
         )
         return status
+
+
+def _run_consumer(consumer: Consumer, event: Event, connection: sqlite3.Connection) -> None:
+    """Ejecuta el consumidor bajo su autorizador y lo retira al terminar, incluso si falla."""
+    connection.set_authorizer(_consumer_policy(bool(getattr(consumer, "writes_audit", False))))
+    try:
+        consumer.handle(event, connection)
+    finally:
+        connection.set_authorizer(None)
 
 
 def _append(connection: sqlite3.Connection, event: Event) -> None:

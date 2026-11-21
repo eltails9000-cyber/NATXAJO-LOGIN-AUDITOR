@@ -100,7 +100,8 @@ Reglas de la migración:
 
 ## 5. Verificación realizada
 
-**Pruebas.** 262 en total: las 214 existentes y 48 nuevas. Todas pasan.
+**Pruebas.** 262 en total: las 214 existentes y 48 nuevas. Todas pasan. Tras la auditoría
+posterior (`docs/AUDITORIA_ETAPA_2.md`) hay 279: las 262 anteriores sin cambios y 17 nuevas.
 
 Cuatro pruebas existentes cambiaron de procedimiento o de expectativa. Ninguna aserción de
 seguridad se debilitó:

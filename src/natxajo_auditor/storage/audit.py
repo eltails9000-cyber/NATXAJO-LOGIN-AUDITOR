@@ -28,6 +28,7 @@ class AuditConsumer:
     """Escribe cada evento en audit_events. Es idempotente: el identificador del evento es único."""
 
     name = AUDIT_CONSUMER
+    writes_audit = True
 
     def accepts(self, event: Event) -> bool:
         return True

@@ -3,7 +3,8 @@
 Para cada operación comprueba, en este orden:
 1. La sesión es válida y no ha caducado.
 2. La cuenta tiene el permiso requerido.
-3. Si la operación afecta a una empresa, el actor puede actuar sobre esa empresa.
+3. El actor puede actuar sobre la empresa indicada. Sin empresa indicada, la operación es de
+   plataforma y solo la cuenta de la plataforma la ejecuta.
 4. Si la operación es crítica: el usuario la ha confirmado y ha reautenticado la sesión hace poco.
 
 La empresa del actor se lee de su cuenta en la base de datos, nunca de la entrada del usuario.
@@ -35,6 +36,17 @@ CRITICAL_PERMISSIONS: frozenset[str] = frozenset(
         "almacenamiento:nucleo:copia:restaurar",
     }
 )
+
+
+def _may_run_in(actor: Actor, company_id: str | None) -> bool:
+    """Una operación sin empresa indicada es de plataforma: no se ejecuta por omisión.
+
+    Así un llamador que olvida pasar la empresa no concede a una cuenta de empresa las
+    operaciones de infraestructura (versiones, módulos, plugins, copias).
+    """
+    if company_id is None:
+        return actor.is_platform
+    return may_act_on(actor, company_id)
 
 
 class OperationGuard:
@@ -77,7 +89,7 @@ class OperationGuard:
         critical = permission in CRITICAL_PERMISSIONS
         try:
             self._authorizer.require(actor.username, permission)
-            if company_id is not None and not may_act_on(actor, company_id):
+            if not _may_run_in(actor, company_id):
                 raise AuthorizationError(SCOPE_DENIED)
             if critical and not confirmed:
                 raise AuthorizationError("operación crítica: se requiere confirmación")

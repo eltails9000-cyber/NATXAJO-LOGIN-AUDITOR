@@ -43,13 +43,15 @@ class SessionStore:
 
     def open(self, username: str) -> str:
         now = self._clock()
-        if len(self._live_rows(username, now)) >= MAX_CONCURRENT_SESSIONS:
-            raise AuthorizationError(
-                f"máximo de {MAX_CONCURRENT_SESSIONS} sesiones simultáneas alcanzado; "
-                "cierre una sesión"
-            )
         token = secrets.token_urlsafe(32)
+        # El recuento y la inserción van en la misma transacción de escritura: dos inicios
+        # simultáneos no pueden superar el límite leyendo el mismo número de sesiones.
         with self._database.transaction() as connection:
+            if len(self._live_rows(username, now)) >= MAX_CONCURRENT_SESSIONS:
+                raise AuthorizationError(
+                    f"máximo de {MAX_CONCURRENT_SESSIONS} sesiones simultáneas alcanzado; "
+                    "cierre una sesión"
+                )
             connection.execute(
                 "INSERT INTO sessions (token_hash, username, created_at, last_activity, "
                 "expires_at) VALUES (?, ?, ?, ?, ?)",
