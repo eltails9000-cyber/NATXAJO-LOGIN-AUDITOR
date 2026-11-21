@@ -4,6 +4,8 @@ Reglas:
 - Una solicitud no concede nada hasta que se aprueba.
 - Nadie aprueba su propia solicitud.
 - Quien aprueba debe tener el permiso de aprobar y también el permiso que aprueba (anti-escalada).
+- Ninguna gestión cruza empresas: quien solicita, aprueba, rechaza o revoca debe poder actuar sobre
+  la empresa de la cuenta afectada. La empresa `plataforma` puede actuar sobre todas.
 - Un permiso temporal caduca a los minutos indicados. Los minutos están acotados a MAX_GRANT_MINUTES.
 """
 
@@ -17,6 +19,7 @@ from natxajo_auditor.core.exceptions import AuthorizationError, ValidationError
 from natxajo_auditor.core.utilities import Clock, from_iso, to_iso
 from natxajo_auditor.core.validation import require_text
 from natxajo_auditor.security.permissions import Permission, parse_permission
+from natxajo_auditor.security.tenancy import SCOPE_DENIED, company_allows
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.database import Database
 
@@ -57,8 +60,8 @@ class GrantStore:
         if not 1 <= minutes <= MAX_GRANT_MINUTES:
             raise ValidationError(f"la duración debe estar entre 1 y {MAX_GRANT_MINUTES} minutos")
         reason = require_text(reason, "motivo", "permiso temporal")
-        if not self._account_exists(username):
-            raise ValidationError(f"la cuenta no existe: {username}")
+        target_company = self._target_company(username)
+        self._require_scope(requester, target_company)
         with self._database.transaction() as connection:
             cursor = connection.execute(
                 "INSERT INTO permission_grants (username, permission, minutes, reason, "
@@ -70,6 +73,7 @@ class GrantStore:
                 "grant.requested",
                 {"grant": grant_id, "username": username, "permission": str(target)},
                 connection=connection,
+                company_id=target_company,
             )
         return grant_id
 
@@ -78,6 +82,8 @@ class GrantStore:
         self._require_pending(record)
         if approver == record.requested_by:
             raise AuthorizationError("no puede aprobar su propia solicitud")
+        target_company = self._target_company(record.username)
+        self._require_scope(approver, target_company)
         if not can(approver, APPROVE_PERMISSION):
             raise AuthorizationError("no tiene permiso para aprobar solicitudes")
         if not can(approver, record.permission):
@@ -95,6 +101,7 @@ class GrantStore:
                 "grant.approved",
                 {"grant": grant_id, "approver": approver, "permission": record.permission},
                 connection=connection,
+                company_id=target_company,
             )
         return self.get(grant_id)
 
@@ -102,18 +109,22 @@ class GrantStore:
         """Rechaza una solicitud. Quien la hizo puede retirarla sin más permisos."""
         record = self.get(grant_id)
         self._require_pending(record)
+        target_company = self._target_company(record.username)
+        self._require_scope(actor, target_company)
         if actor != record.requested_by and not can(actor, APPROVE_PERMISSION):
             raise AuthorizationError("no tiene permiso para rechazar solicitudes")
-        self._set_status(grant_id, REJECTED, actor, "grant.rejected")
+        self._set_status(grant_id, REJECTED, actor, "grant.rejected", target_company)
         return self.get(grant_id)
 
     def revoke(self, actor: str, grant_id: int, can: Can) -> GrantRecord:
         record = self.get(grant_id)
         if record.status != ACTIVE:
             raise ValidationError("solo se puede revocar un permiso activo")
+        target_company = self._target_company(record.username)
+        self._require_scope(actor, target_company)
         if not can(actor, REVOKE_PERMISSION):
             raise AuthorizationError("no tiene permiso para revocar permisos temporales")
-        self._set_status(grant_id, REVOKED, actor, "grant.revoked")
+        self._set_status(grant_id, REVOKED, actor, "grant.revoked", target_company)
         return self.get(grant_id)
 
     def get(self, grant_id: int) -> GrantRecord:
@@ -122,8 +133,17 @@ class GrantStore:
             raise ValidationError(f"solicitud de permiso no existe: {grant_id}")
         return _to_record(rows[0])
 
-    def list_grants(self) -> list[GrantRecord]:
-        return [_to_record(row) for row in self._database.fetchall(_SELECT + " ORDER BY id")]
+    def list_grants(self, company_id: str | None = None) -> list[GrantRecord]:
+        """Solicitudes ordenadas por identificador. Con company_id, solo las de esa empresa."""
+        if company_id is None:
+            rows = self._database.fetchall(_SELECT + " ORDER BY id")
+        else:
+            rows = self._database.fetchall(
+                _SELECT + " WHERE username IN "
+                "(SELECT username FROM accounts WHERE company_id = ?) ORDER BY id",
+                (company_id,),
+            )
+        return [_to_record(row) for row in rows]
 
     def active_permissions(self, username: str) -> list[Permission]:
         """Permisos temporales activos y no caducados de una cuenta."""
@@ -144,19 +164,39 @@ class GrantStore:
         if record.status != PENDING:
             raise ValidationError(f"la solicitud {record.grant_id} ya no está pendiente")
 
-    def _set_status(self, grant_id: int, status: str, actor: str, event: str) -> None:
+    def _require_scope(self, actor: str, company_id: str) -> None:
+        """El actor debe poder actuar sobre la empresa. Una cuenta inexistente no puede."""
+        actor_company = self._company_of(actor)
+        if actor_company is None or not company_allows(actor_company, company_id):
+            raise AuthorizationError(SCOPE_DENIED)
+
+    def _target_company(self, username: str) -> str:
+        company = self._company_of(username)
+        if company is None:
+            raise ValidationError(f"la cuenta no existe: {username}")
+        return company
+
+    def _company_of(self, username: str) -> str | None:
+        rows = self._database.fetchall(
+            "SELECT company_id FROM accounts WHERE username = ?", (username,)
+        )
+        return str(rows[0][0]) if rows else None
+
+    def _set_status(
+        self, grant_id: int, status: str, actor: str, event: str, company_id: str
+    ) -> None:
         with self._database.transaction() as connection:
             connection.execute(
                 "UPDATE permission_grants SET status = ?, updated_at = CURRENT_TIMESTAMP "
                 "WHERE id = ?",
                 (status, grant_id),
             )
-            self._audit.record(event, {"grant": grant_id, "actor": actor}, connection=connection)
-
-    def _account_exists(self, username: str) -> bool:
-        return bool(
-            self._database.fetchall("SELECT 1 FROM accounts WHERE username = ?", (username,))
-        )
+            self._audit.record(
+                event,
+                {"grant": grant_id, "actor": actor},
+                connection=connection,
+                company_id=company_id,
+            )
 
 
 _SELECT = (

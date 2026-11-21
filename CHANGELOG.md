@@ -2,6 +2,26 @@
 
 ## [Sin publicar]
 
+- Etapa 2 de la especificación, dentro de la fase 7:
+  - Multiempresa: tabla `companies` con la empresa `plataforma`. Cada cuenta tiene `company_id`,
+    fijado al crearla y protegido por disparadores. El ámbito se comprueba en el guardián, en los
+    permisos temporales, en la auditoría y en la terminal.
+  - Terminal: opciones 18 (crear empresa) y 19 (listar empresas), solo para la plataforma. La
+    auditoría y las solicitudes de permisos se filtran por empresa.
+  - Instalador del primer administrador con código de un solo uso: hash PBKDF2, caducidad de 30
+    minutos, cinco intentos y cierre permanente por disparador.
+  - Bus de eventos: catálogo tipado de 34 eventos, outbox transaccional, consumidores idempotentes,
+    reintentos, cola de fallidos y reenvío al arrancar. La auditoría es un consumidor. Las categorías
+    `operativo` y `seguridad` se guardan por separado.
+  - Migraciones 6 a 8, reversibles. Antes de migrar una base existente se guarda una copia en
+    `storage/migraciones/`. Plan y resultados en `docs/MIGRACION_ETAPA_2.md`.
+  - Corrección de la etapa 2: los cambios de estado, contraseña y roles de cuentas, y las
+    reautenticaciones y caducidades de sesión, se escriben y auditan en una transacción.
+  - 262 casos de prueba automatizados (214 existentes y 48 nuevas), con ruff y mypy en modo estricto
+    sin errores.
+- Cambio incompatible: `SecurityService.bootstrap_administrator` se elimina. El primer administrador
+  se crea con el instalador. `AuditLog.record` solo acepta eventos del catálogo y sus claves
+  declaradas; un nombre desconocido se rechaza.
 - Corrección de seguridad: durante un bloqueo de cuenta, la respuesta ya no revela que la cuenta
   existe. Los intentos bloqueados quedan en la auditoría como `account.login_blocked`.
 - Auditoría de arquitectura en `docs/CLAUDE_ARCHITECTURE_AUDIT.md`, con plan de corrección por etapas.

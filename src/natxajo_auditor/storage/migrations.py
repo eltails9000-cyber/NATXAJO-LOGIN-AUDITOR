@@ -14,6 +14,8 @@ class Migration:
     version: int
     name: str
     statements: tuple[str, ...]
+    # Sentencias que deshacen la migración. Vacío significa que no es reversible.
+    down: tuple[str, ...] = ()
 
 
 MIGRATIONS: tuple[Migration, ...] = (
@@ -172,6 +174,161 @@ MIGRATIONS: tuple[Migration, ...] = (
             """,
         ),
     ),
+    Migration(
+        version=6,
+        name="empresas",
+        statements=(
+            """
+            CREATE TABLE companies (
+                id TEXT PRIMARY KEY CHECK (length(id) BETWEEN 3 AND 40),
+                name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 120),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            "INSERT INTO companies (id, name) VALUES ('plataforma', 'Plataforma')",
+            # Las cuentas existentes pertenecían a la única instalación, que no tenía clientes.
+            # SQLite no admite una clave foránea en ADD COLUMN con valor por defecto, así que la
+            # integridad se garantiza con los disparadores de abajo.
+            "ALTER TABLE accounts ADD COLUMN company_id TEXT NOT NULL DEFAULT 'plataforma'",
+            "CREATE INDEX accounts_company_id ON accounts (company_id)",
+            """
+            CREATE TRIGGER accounts_company_must_exist_insert BEFORE INSERT ON accounts
+            WHEN NOT EXISTS (SELECT 1 FROM companies WHERE id = NEW.company_id)
+            BEGIN SELECT RAISE(ABORT, 'la empresa de la cuenta no existe'); END
+            """,
+            """
+            CREATE TRIGGER accounts_company_must_exist_update BEFORE UPDATE OF company_id ON accounts
+            WHEN NOT EXISTS (SELECT 1 FROM companies WHERE id = NEW.company_id)
+            BEGIN SELECT RAISE(ABORT, 'la empresa de la cuenta no existe'); END
+            """,
+            """
+            CREATE TRIGGER accounts_company_is_immutable BEFORE UPDATE OF company_id ON accounts
+            WHEN OLD.company_id <> NEW.company_id
+            BEGIN SELECT RAISE(ABORT, 'la empresa de una cuenta no puede cambiarse'); END
+            """,
+            """
+            CREATE TRIGGER companies_id_is_immutable BEFORE UPDATE OF id ON companies
+            BEGIN SELECT RAISE(ABORT, 'el identificador de empresa no puede cambiarse'); END
+            """,
+            """
+            CREATE TRIGGER companies_with_accounts_cannot_be_deleted BEFORE DELETE ON companies
+            WHEN EXISTS (SELECT 1 FROM accounts WHERE company_id = OLD.id)
+            BEGIN SELECT RAISE(ABORT, 'la empresa tiene cuentas'); END
+            """,
+            """
+            CREATE TRIGGER platform_company_cannot_be_deleted BEFORE DELETE ON companies
+            WHEN OLD.id = 'plataforma'
+            BEGIN SELECT RAISE(ABORT, 'la empresa de plataforma no puede borrarse'); END
+            """,
+        ),
+        down=(
+            "DROP TRIGGER platform_company_cannot_be_deleted",
+            "DROP TRIGGER companies_with_accounts_cannot_be_deleted",
+            "DROP TRIGGER companies_id_is_immutable",
+            "DROP TRIGGER accounts_company_is_immutable",
+            "DROP TRIGGER accounts_company_must_exist_update",
+            "DROP TRIGGER accounts_company_must_exist_insert",
+            "DROP INDEX accounts_company_id",
+            "ALTER TABLE accounts DROP COLUMN company_id",
+            "DROP TABLE companies",
+        ),
+    ),
+    Migration(
+        version=7,
+        name="instalacion",
+        statements=(
+            """
+            CREATE TABLE installation (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                state TEXT NOT NULL CHECK (state IN ('pending', 'completed')),
+                code_hash TEXT,
+                code_expires_at TEXT,
+                code_failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (code_failed_attempts >= 0),
+                completed_at TEXT,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            # Una instalación que ya tiene cuentas se considera completada: no debe reabrirse.
+            """
+            INSERT INTO installation (id, state, completed_at)
+            SELECT 1,
+                   CASE WHEN EXISTS (SELECT 1 FROM accounts) THEN 'completed' ELSE 'pending' END,
+                   CASE WHEN EXISTS (SELECT 1 FROM accounts) THEN CURRENT_TIMESTAMP END
+            """,
+            """
+            CREATE TRIGGER installation_is_locked_after_completion BEFORE UPDATE ON installation
+            WHEN OLD.state = 'completed'
+            BEGIN SELECT RAISE(ABORT, 'la instalación ya está completada y no puede modificarse'); END
+            """,
+            """
+            CREATE TRIGGER installation_cannot_be_deleted BEFORE DELETE ON installation
+            BEGIN SELECT RAISE(ABORT, 'la instalación no puede borrarse'); END
+            """,
+        ),
+        down=(
+            "DROP TRIGGER installation_cannot_be_deleted",
+            "DROP TRIGGER installation_is_locked_after_completion",
+            "DROP TABLE installation",
+        ),
+    ),
+    Migration(
+        version=8,
+        name="eventos",
+        statements=(
+            """
+            CREATE TABLE event_outbox (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL CHECK (category IN ('operativo', 'seguridad')),
+                company_id TEXT,
+                actor TEXT,
+                occurred_at TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'delivered', 'dead')),
+                attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+                last_error TEXT
+            )
+            """,
+            "CREATE INDEX event_outbox_status ON event_outbox (status, seq)",
+            """
+            CREATE TABLE event_deliveries (
+                event_id TEXT NOT NULL REFERENCES event_outbox (event_id) ON DELETE CASCADE,
+                consumer TEXT NOT NULL,
+                delivered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (event_id, consumer)
+            )
+            """,
+            "ALTER TABLE audit_events ADD COLUMN event_id TEXT",
+            (
+                "ALTER TABLE audit_events ADD COLUMN category TEXT NOT NULL DEFAULT 'operativo' "
+                "CHECK (category IN ('operativo', 'seguridad'))"
+            ),
+            "ALTER TABLE audit_events ADD COLUMN company_id TEXT",
+            "ALTER TABLE audit_events ADD COLUMN actor TEXT",
+            # Clasificación de los eventos ya registrados, según su tipo.
+            (
+                "UPDATE audit_events SET category = 'seguridad' WHERE "
+                "event_type LIKE 'account.%' OR event_type LIKE 'session.%' "
+                "OR event_type LIKE 'grant.%' OR event_type LIKE 'operation.%' "
+                "OR event_type IN ('plugin.rejected', 'plugin.reviewed', 'plugin.publisher_revoked')"
+            ),
+            "CREATE UNIQUE INDEX audit_events_event_id ON audit_events (event_id)",
+            "CREATE INDEX audit_events_company_id ON audit_events (company_id)",
+        ),
+        down=(
+            "DROP INDEX audit_events_company_id",
+            "DROP INDEX audit_events_event_id",
+            "ALTER TABLE audit_events DROP COLUMN actor",
+            "ALTER TABLE audit_events DROP COLUMN company_id",
+            "ALTER TABLE audit_events DROP COLUMN category",
+            "ALTER TABLE audit_events DROP COLUMN event_id",
+            "DROP TABLE event_deliveries",
+            "DROP INDEX event_outbox_status",
+            "DROP TABLE event_outbox",
+        ),
+    ),
 )
 
 _BOOKKEEPING = (
@@ -209,6 +366,57 @@ def apply_migrations(
             raise StorageError(f"Falló la migración {migration.version}: {exc}") from exc
         newly_applied.append(migration.version)
     return newly_applied
+
+
+def pending_versions(
+    database: Database, migrations: tuple[Migration, ...] = MIGRATIONS
+) -> list[int]:
+    """Versiones que aún no están aplicadas. Una base sin tabla de control tiene todas pendientes."""
+    table = database.fetchall(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'"
+    )
+    applied: set[int] = set()
+    if table:
+        applied = {
+            int(row[0]) for row in database.fetchall("SELECT version FROM schema_migrations")
+        }
+    return [
+        m.version
+        for m in sorted(migrations, key=lambda item: item.version)
+        if m.version not in applied
+    ]
+
+
+def rollback_migrations(
+    database: Database, target_version: int, migrations: tuple[Migration, ...] = MIGRATIONS
+) -> list[int]:
+    """Revierte, de la más reciente a la más antigua, las migraciones posteriores a target_version.
+
+    Antes de ejecutar nada comprueba que todas las migraciones a revertir son reversibles. Cada
+    reversión es transaccional. Devuelve las versiones revertidas.
+    """
+    _check_definitions(migrations)
+    known = {migration.version: migration for migration in migrations}
+    applied = sorted(
+        int(row[0]) for row in database.fetchall("SELECT version FROM schema_migrations")
+    )
+    to_revert = [version for version in reversed(applied) if version > target_version]
+    for version in to_revert:
+        migration = known.get(version)
+        if migration is None:
+            raise StorageError(f"no se puede revertir la migración desconocida {version}")
+        if not migration.down:
+            raise StorageError(f"la migración {version} ({migration.name}) no es reversible")
+    for version in to_revert:
+        migration = known[version]
+        try:
+            with database.transaction() as connection:
+                for statement in migration.down:
+                    connection.execute(statement)
+                connection.execute("DELETE FROM schema_migrations WHERE version = ?", (version,))
+        except sqlite3.Error as exc:
+            raise StorageError(f"Falló la reversión de la migración {version}: {exc}") from exc
+    return to_revert
 
 
 def _check_definitions(migrations: tuple[Migration, ...]) -> None:

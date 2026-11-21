@@ -3,6 +3,15 @@
 Este documento sustituye a `docs/roadmap.md`. Describe lo que existe en el código, no lo que
 aparece en el documento maestro.
 
+## Etapa de especificación y fase del repositorio
+
+- **Etapa de especificación:** 2 (arquitectura). Se aplicaron las tres decisiones aprobadas: modelo
+  multiempresa con `company_id` fijado por el servidor, instalador del primer administrador con
+  código de un solo uso, y bus de eventos integrado con la auditoría. La etapa 1 (auditoría) está
+  en `docs/CLAUDE_ARCHITECTURE_AUDIT.md`. Las etapas 3 a 16 no se han iniciado.
+- **Fase del repositorio:** 7 (seguridad y RBAC), en estado parcial. La etapa 2 se integra en esta
+  fase. Las fases 3 a 6 no cambian de estado en esta etapa.
+
 ## Estados
 
 - **VERIFICADO**: implementado y cubierto por pruebas automatizadas que pasan.
@@ -22,7 +31,7 @@ aparece en el documento maestro.
 | 4 | Gestor de versiones y cargador manual | PARCIAL |
 | 5 | Sistema de módulos y dependencias | VERIFICADO (los módulos no ejecutan código) |
 | 6 | Plugins: firma, integridad, editores, catálogo, revisión y ciclo de vida | PARCIAL |
-| 7 | Seguridad, RBAC, sesiones y guardián de operaciones | PARCIAL |
+| 7 | Seguridad, RBAC, sesiones, guardián, multiempresa, instalador y bus de eventos (etapa 2) | PARCIAL |
 | 8 | Motor de automatización | PENDIENTE |
 | 9 | Motor de auditoría defensiva | PENDIENTE |
 | 10 | Aplicación de escritorio y terminal avanzada | PENDIENTE |
@@ -30,7 +39,8 @@ aparece en el documento maestro.
 | 12 | Mantenimiento, actualizaciones y recuperación | PENDIENTE |
 | 13 | Pruebas integrales y distribución | PENDIENTE |
 
-Pruebas automatizadas: 213 casos, con ruff y mypy en modo estricto sin errores.
+Pruebas automatizadas: 262 casos (214 de la etapa 1, de las que 4 cambiaron de procedimiento o de
+expectativa, y 48 nuevas de la etapa 2), con ruff y mypy en modo estricto sin errores.
 
 ## Fase 3: configuración y almacenamiento (PARCIAL)
 
@@ -118,13 +128,44 @@ Pruebas automatizadas: 213 casos, con ruff y mypy en modo estricto sin errores.
   permiso concedido, sin autoaprobación, rechazo, revocación y caducidad.
 - **Guardián de operaciones:** comprueba sesión, permiso, confirmación y reautenticación reciente
   para las operaciones críticas; registra denegaciones y ejecuciones en la auditoría.
-- **Terminal:** creación del primer administrador, inicio de sesión con tres intentos, caducidad que
-  vuelve a la pantalla de inicio, menú filtrado por permisos, confirmación y reautenticación para las
-  opciones críticas. Opciones 14 a 17: crear cuenta, solicitar permiso temporal, aprobar o rechazar
-  permiso temporal, y reautenticar.
+- **Terminal:** instalación del primer administrador con código, inicio de sesión con tres intentos,
+  caducidad que vuelve a la pantalla de inicio, menú filtrado por permisos y por empresa,
+  confirmación y reautenticación para las opciones críticas. Opciones 14 a 19: crear cuenta,
+  solicitar permiso temporal, aprobar o rechazar permiso temporal, reautenticar, crear empresa y
+  listar empresas.
 - **Migración 5:** tablas `accounts`, `roles`, `role_grants`, `role_parents`, `account_roles`,
-  `permission_grants` y `sessions`.
+  `permission_grants` y `sessions`. Migraciones 6 a 8: empresas, instalación y bus de eventos (ver
+  la etapa 2 más abajo).
 - **Pruebas:** 39 casos en `tests/test_security.py`, más las pruebas de terminal.
+
+### Etapa 2 de la especificación (VERIFICADO)
+
+- **Multiempresa.** Tabla `companies` con la empresa reservada `plataforma`. Cada cuenta tiene
+  `company_id`, fijado al crearla. Un disparador impide cambiarlo y no permite borrar empresas con
+  cuentas ni la plataforma. El actor de cada operación sale de la cuenta en la base de datos, nunca
+  de la entrada del usuario. Una cuenta de empresa solo actúa sobre su empresa; la plataforma actúa
+  sobre todas.
+- **Ámbito en el guardián y en el almacén.** `OperationGuard` comprueba el ámbito antes de pedir
+  confirmación. Las solicitudes de permisos temporales, sus aprobaciones, rechazos y revocaciones
+  comprueban el ámbito de la cuenta afectada. En la terminal, una cuenta inexistente y una ajena dan
+  el mismo mensaje fuera de la plataforma. La API sigue distinguiendo los dos casos.
+- **Permisos administrativos.** Crear empresas exige `seguridad:nucleo:empresa:administrar`, es
+  crítico y solo lo ejecuta la plataforma. Una cuenta de empresa crea cuentas solo en su empresa.
+- **Instalador.** Código de 128 bits, guardado solo como hash PBKDF2, válido 30 minutos y con cinco
+  intentos fallidos como máximo. Un solo uso. Al completarse, la instalación queda cerrada por un
+  disparador. Mientras no se completa, no se pueden crear cuentas.
+- **Bus de eventos.** Catálogo cerrado de 34 tipos, cada uno con sus claves obligatorias y
+  opcionales. Outbox transaccional: el evento se guarda en la misma transacción que el cambio y se
+  entrega tras confirmarla. Consumidores idempotentes con registro de entregas, reintentos, cola de
+  fallidos y reenvío al arrancar. La auditoría es un consumidor más.
+- **Categorías.** `operativo` (cambios de la plataforma) y `seguridad` (cuentas, sesiones, permisos,
+  operaciones e instalación). La auditoría se puede filtrar por categoría y por empresa.
+- **Migraciones 6 a 8.** Reversibles. Copia previa de la base antes de migrar una base existente.
+  Plan y resultados en `docs/MIGRACION_ETAPA_2.md`.
+- **Verificación.** Pruebas de aislamiento, instalación, permisos administrativos, bus de eventos y
+  migraciones (48 casos). Además, seis fallos introducidos a propósito en una copia de trabajo; cinco
+  los detectaron las pruebas de inmediato y el sexto, la falta de registro de entregas, llevó a
+  añadir una prueba que ahora lo detecta.
 
 ### Pendiente
 
@@ -138,7 +179,11 @@ Pruebas automatizadas: 213 casos, con ruff y mypy en modo estricto sin errores.
 - **Aplicación de permisos a módulos y plugins.** Los permisos que declaran se validan en el formato
   `subsistema:modulo:recurso:accion`, pero no se aplican porque no existe ejecución de módulos ni
   plugins.
-- **Multiempresa.** No hay separación entre empresas, aplicaciones ni entornos.
+- **Multiempresa (parcial).** Las empresas existen, pero no hay aplicaciones ni entornos. Las
+  operaciones de instalación (versiones, módulos, plugins, copias) son de la plataforma. Quedan
+  pendientes la desactivación de empresas y los roles propios de cada empresa.
+- **Terminal de eventos fallidos.** La cola de eventos fallidos se consulta por API, pero la terminal
+  no la muestra ni la reencola.
 
 Detalle de límites y de qué protege cada control: `docs/seguridad.md`.
 
@@ -154,6 +199,10 @@ Hallazgos prioritarios:
   auditoría.
 - **P1:** la base de datos no tiene copia de seguridad desde la aplicación.
 - **Corregido:** durante un bloqueo, la respuesta revelaba que la cuenta existía.
+- **Corregido en la etapa 2:** P-04, el primer administrador se creaba sin código; ahora lo crea el
+  instalador. Los cambios de estado, contraseña y roles de cuentas, y las reautenticaciones y
+  caducidades de sesión, se escriben y auditan en una transacción.
+- **Abierto:** P-01, la API del kernel sin token sigue siendo de confianza. Previsto para la etapa 8.
 
 ## Otros pendientes
 

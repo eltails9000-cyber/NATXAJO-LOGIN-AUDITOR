@@ -62,6 +62,16 @@ Estos límites vienen del documento maestro y no se relajan:
   ejecuciones quedan en la auditoría como `operation.denied` y `operation.executed`.
 - **Menú filtrado.** La terminal solo muestra las opciones que la cuenta puede usar. Una opción
   no permitida se rechaza igualmente si se introduce a mano.
+- **Empresas.** Cada cuenta pertenece a una empresa, fijada al crearla y protegida por disparadores.
+  El guardián comprueba el ámbito antes de pedir confirmación: una cuenta de empresa no actúa sobre
+  otra empresa, aunque tenga el permiso. Las solicitudes de permisos temporales se comprueban igual.
+  La terminal filtra la auditoría y las solicitudes por empresa.
+- **Instalador.** El primer administrador se crea con un código de 128 bits, que se muestra una vez,
+  se guarda como hash PBKDF2, caduca a los 30 minutos y admite cinco intentos como máximo. Completada
+  la instalación, un disparador impide reabrirla.
+- **Bus de eventos y auditoría.** Solo se registran eventos del catálogo cerrado, con su categoría
+  (`operativo` o `seguridad`) y sin claves con apariencia de secreto. Un evento se guarda en la misma
+  transacción que el cambio y se entrega después. Los fallos se reintentan y no se pierden.
 
 ## Qué NO está implementado
 
@@ -73,17 +83,21 @@ Estos límites vienen del documento maestro y no se relajan:
 - **Ejecución de plugins.** Habilitar un plugin solo registra su estado. No hay procesos separados
   ni límites de recursos. Cuando exista ejecución, se documentará el aislamiento real del sistema
   operativo que se aplica.
-- **Multiempresa.** No hay separación entre empresas, aplicaciones ni entornos. Todas las cuentas
-  comparten una base de datos, un almacenamiento y un conjunto de versiones.
+- **Multiempresa (parcial).** Las empresas no tienen aplicaciones ni entornos propios: comparten la
+  base de datos, el almacenamiento y el conjunto de versiones de la plataforma. La API interna del
+  kernel, sin token, no comprueba el ámbito; esa comprobación llega con la etapa 8.
 - **Cifrado de datos sensibles.** La base de datos y las copias están en texto plano. Solo las
   contraseñas se guardan como hash; cuentas, roles, sesiones y auditoría no están cifrados.
 - **Integridad de la auditoría.** Los eventos no están encadenados ni firmados. Quien pueda escribir
   en la base de datos puede alterarlos sin que se detecte.
-- **Primer administrador.** Quien use la terminal antes de que exista la primera cuenta puede crear
-  el administrador. Ninguna comprobación externa lo impide.
-- **Gestión de cuentas desde la terminal.** La terminal permite crear cuentas y solicitar, aprobar
-  o rechazar permisos temporales. Revocar permisos, deshabilitar cuentas, cambiar roles y cambiar
-  contraseñas solo están en la API (`kernel.security`).
+- **Primer administrador.** El código de instalación se muestra en la misma terminal. Quien pueda
+  ver esa terminal durante la instalación puede completarla. No hay un canal externo para entregar el
+  código. El límite de cinco intentos es por código: cada ejecución emite uno nuevo. La protección
+  contra la adivinación es la entropía del código (128 bits).
+- **Gestión de cuentas desde la terminal.** La terminal permite crear cuentas en la empresa de la
+  sesión, crear y listar empresas (solo la plataforma), y solicitar, aprobar o rechazar permisos
+  temporales dentro del ámbito de la empresa. Revocar permisos, deshabilitar cuentas, cambiar roles
+  y cambiar contraseñas solo están en la API (`kernel.security`).
 - **Recuperación de acceso.** No hay recuperación de contraseñas ni borrado de cuentas. Una cuenta
   solo se deshabilita.
 - **Desbloqueo.** No hay desbloqueo manual. Una cuenta bloqueada vuelve a estar disponible cuando

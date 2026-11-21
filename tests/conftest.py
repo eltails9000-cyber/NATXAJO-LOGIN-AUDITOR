@@ -30,10 +30,18 @@ def kernel(context: RuntimeContext) -> Iterator[Kernel]:
     instance.stop()
 
 
+def install_administrator(
+    kernel: Kernel, username: str = ADMIN_USER, password: str = ADMIN_PASSWORD
+) -> None:
+    """Completa la instalación inicial con un código emitido en la propia prueba."""
+    installer = kernel.security.installer
+    installer.complete(installer.issue_code(), username, password)
+
+
 @pytest.fixture
 def admin(kernel: Kernel) -> tuple[str, str]:
-    """Crea la cuenta de administrador de pruebas y devuelve (usuario, contraseña)."""
-    kernel.security.bootstrap_administrator(ADMIN_USER, ADMIN_PASSWORD)
+    """Instala la plataforma con un administrador de pruebas y devuelve (usuario, contraseña)."""
+    install_administrator(kernel)
     return ADMIN_USER, ADMIN_PASSWORD
 
 

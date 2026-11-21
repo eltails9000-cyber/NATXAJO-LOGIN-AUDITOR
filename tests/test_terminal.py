@@ -18,6 +18,22 @@ def _scripted(answers: Iterable[str]) -> Callable[[str], str]:
     return read
 
 
+def _install_reader(lines: list[str], answers: Iterable[str]) -> Callable[[str], str]:
+    """Lector de secretos para la instalación: el código se toma de la salida, como haría una persona."""
+    iterator = iter(answers)
+
+    def read(prompt: str) -> str:
+        if prompt.startswith("Código de instalación"):
+            printed = [line for line in lines if line.startswith("  código: ")]
+            return printed[-1].split(": ", 1)[1]
+        try:
+            return next(iterator)
+        except StopIteration:
+            raise EOFError from None
+
+    return read
+
+
 def test_terminal_lists_versions_and_exits(
     kernel: Kernel, admin: tuple[str, str], make_manifest: Callable[..., Path]
 ) -> None:
@@ -95,12 +111,29 @@ def test_first_run_creates_the_administrator(kernel: Kernel) -> None:
         kernel,
         read=_scripted(["admin_inicial", "admin_inicial", "0"]),
         write=lines.append,
-        read_secret=_scripted([ADMIN_PASSWORD, ADMIN_PASSWORD, ADMIN_PASSWORD]),
+        read_secret=_install_reader(lines, [ADMIN_PASSWORD, ADMIN_PASSWORD, ADMIN_PASSWORD]),
     )
     assert code == 0
     assert kernel.security.has_accounts()
     assert kernel.security.accounts.get("admin_inicial").roles == ("administrador",)
+    assert not kernel.security.installer.is_pending()
     assert any("Cuenta de administrador creada" in line for line in lines)
+
+
+def test_first_run_refuses_a_wrong_code_and_stops_after_the_limit(kernel: Kernel) -> None:
+    lines: list[str] = []
+    code = run_terminal(
+        kernel,
+        read=_scripted(["admin_inicial"] * 5),
+        write=lines.append,
+        read_secret=lambda prompt: (
+            "codigo-incorrecto" if prompt.startswith("Código") else ADMIN_PASSWORD
+        ),
+    )
+    assert code == 1
+    assert sum(1 for line in lines if line.startswith("Error:")) == 5
+    assert kernel.security.installer.is_pending()
+    assert not kernel.security.has_accounts()
 
 
 def test_bootstrap_refuses_mismatched_passwords(kernel: Kernel) -> None:
@@ -109,7 +142,7 @@ def test_bootstrap_refuses_mismatched_passwords(kernel: Kernel) -> None:
         kernel,
         read=_scripted(["admin_inicial"]),
         write=lines.append,
-        read_secret=_scripted([ADMIN_PASSWORD, "otra-contraseña-x"]),
+        read_secret=_install_reader(lines, [ADMIN_PASSWORD, "otra-contraseña-x"]),
     )
     assert code == 1
     assert "Error: las contraseñas no coinciden" in lines
