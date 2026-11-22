@@ -32,6 +32,13 @@ Estos límites vienen del documento maestro y no se relajan:
   ellos. Los rechazos quedan en la auditoría. Límites: la verificación no es de tiempo constante,
   aceptable para datos públicos pero no para firmar secretos; la revisión del inventario de
   archivos es heurística y no sustituye la revisión humana.
+- **Confianza protegida (P-05).** Dar de alta o revocar un editor de confianza, y registrar una
+  revisión de terceros, exigen sesión válida, un permiso crítico del sistema
+  (`plugins:nucleo:editor:administrar` o `plugins:nucleo:revision:administrar`), ámbito de
+  plataforma, confirmación explícita y reautenticación reciente. Una cuenta de empresa no actúa
+  sobre la confianza global, aunque tenga el rol de administrador. La escritura y su auditoría van
+  en una transacción. La base impide cambiar la clave de un editor, reactivar un editor revocado y
+  borrar editores (migración 9). Un paquete no puede declarar su propio nivel de confianza.
 - **Cuentas y contraseñas.** Las contraseñas se guardan como PBKDF2-HMAC-SHA256 con sal aleatoria
   de 16 bytes y 600 000 iteraciones por defecto. Nunca se guardan en texto plano ni aparecen en la
   auditoría. La política exige entre 12 y 256 caracteres, al menos 4 caracteres distintos, y
@@ -99,6 +106,11 @@ Estos límites vienen del documento maestro y no se relajan:
   administradores, cambiar contraseñas sin la anterior y activar versiones. La terminal no la usa sin
   el guardián. Dentro de un mismo proceso, ninguna API interna es una frontera de seguridad: la
   frontera real llegará con la ejecución de módulos o plugins en un proceso separado (etapa 8).
+- **Confianza dentro del proceso (P-01).** Las escrituras internas de editores y de revisiones
+  (`TrustStore._insert`, `TrustStore._revoke`, `ReviewLog.record`) no exigen token. Código que
+  comparta el proceso y tenga una conexión puede usarlas. Las vías protegidas son
+  `register_publisher`, `revoke_publisher` y `record_review`. Ver `docs/AUDITORIA_ETAPA_2.md`,
+  sección 5.
 - **Cifrado de datos sensibles.** La base de datos y las copias están en texto plano. Solo las
   contraseñas se guardan como hash; cuentas, roles, sesiones y auditoría no están cifrados.
 - **Integridad de la auditoría.** Los eventos no están encadenados ni firmados. Quien pueda escribir

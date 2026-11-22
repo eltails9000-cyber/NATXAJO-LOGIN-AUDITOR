@@ -95,7 +95,10 @@ Verificadas en Linux. Windows no está verificado (ver `docs/PRUEBAS_WINDOWS.md`
   vuelve a verificar la copia almacenada), deshabilitar (bloqueado si otro habilitado lo
   requiere), desinstalar (bloqueado si está habilitado o si otro instalado lo requiere).
 - **Revocación:** revocar un editor deshabilita sus plugins y los que dependen de ellos,
-  transitivamente.
+  transitivamente. Un editor revocado no vuelve a estar activo, ni siquiera con SQL (migración 9).
+- **Confianza protegida (P-05):** alta, revocación y revisión solo con la cuenta de la plataforma,
+  con permiso crítico, confirmación y reautenticación. Pruebas en
+  `tests/test_editores_confianza.py`.
 - **Auditoría:** instalaciones, rechazos, habilitaciones, deshabilitaciones, desinstalaciones,
   revisiones y revocaciones quedan en `audit_events`.
 - **Persistencia:** el estado sobrevive a un reinicio del núcleo.
@@ -197,6 +200,10 @@ regresión: el guardián sin empresa (A-01), el contador de fallos y el bloqueo 
 doble entrega del bus (A-06) y los permisos de los consumidores (A-07). Abierto: P-01, la API
 interna del núcleo sin token. Riesgo aceptado hasta la etapa 8, y condición para ejecutar módulos o
 plugins. Windows no está verificado.
+
+Etapa 3, fase A: P-05 (editores de confianza sin control) estaba fuera de la auditoría anterior. Se
+corrige con la puerta de operaciones, transacciones, auditoría y la migración 9. Ver
+`docs/AUDITORIA_ETAPA_2.md`, sección 3.1.
 
 ## Auditoría de arquitectura (etapa 1)
 

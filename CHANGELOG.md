@@ -2,6 +2,18 @@
 
 ## [Sin publicar]
 
+- Etapa 3, fase A (P-05): editores de confianza protegidos en el servicio y en la base.
+  - Dar de alta (`register_publisher`), revocar (`revoke_publisher`) y revisar un plugin de
+    terceros (`record_review`) exigen sesión, un permiso crítico, ámbito de plataforma,
+    confirmación y reautenticación. El revisor y quien revoca son la cuenta de la sesión.
+  - Auditoría: `plugin.publisher_registered` (nuevo), `plugin.publisher_revoked` (con el usuario) y
+    `plugin.reviewed`, en la misma transacción que el cambio.
+  - Migración 9, reversible: la clave de un editor no cambia, un editor revocado no vuelve a estar
+    activo y los editores no se borran.
+  - Cambio incompatible: `revoke_publisher` y `record_review` reciben el token de sesión. Las altas
+    ya no existen como método de `TrustStore`.
+  - Pruebas: 18 nuevas en `tests/test_editores_confianza.py`.
+
 - Auditoría posterior a la etapa 2 (`docs/AUDITORIA_ETAPA_2.md`):
   - Corregido: el guardián no comprobaba el ámbito de empresa cuando una operación no indicaba
     empresa. Ahora una operación sin empresa es de plataforma.

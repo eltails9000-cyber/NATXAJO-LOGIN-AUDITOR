@@ -27,6 +27,8 @@ pruebas pasan.
   originales sin cambios en sus aserciones, más 17 nuevas en
   `tests/test_auditoria_postimplementacion.py`. Ruff, el formato y mypy en modo estricto no dan
   errores.
+- **Etapa 3, fase A:** P-05 (editores de confianza sin control), que esta auditoría no recogió, se
+  corrigió después. Ver la sección 3.1.
 
 ## 3. Hallazgos por severidad
 
@@ -43,6 +45,7 @@ indica que la prueba falló con el código del commit `9a371c7`.
 | A-06 | Media | Corregido | `storage/outbox.py`, `_deliver` | La comprobación de «ya entregado» estaba fuera de la transacción del consumidor. Otro despachador que confirmara la entrega en medio podía hacer que el consumidor se ejecutara dos veces. Hoy el único consumidor (auditoría) es idempotente, pero un consumidor futuro no tendría esa garantía. | Roja: `assert 1 == 0` sobre las llamadas al consumidor. Prueba `test_a_delivery_committed_by_another_dispatcher_is_not_repeated`. |
 | A-07 | Media-alta | Corregido | `storage/outbox.py`, `_run_consumer` y `_consumer_policy`; `storage/audit.py`, `AuditConsumer.writes_audit` | Un consumidor recibía una conexión sin restricciones. Podía reescribir o borrar la auditoría y la cola de eventos, alterar cuentas, sesiones, instalación o permisos, o crear tablas y ejecutar PRAGMA. | Roja en las 8 sentencias de prueba. Ahora cada una devuelve `not authorized`. Pruebas `test_a_consumer_cannot_alter_the_platform_or_its_history` (8 casos) y `test_the_restriction_ends_with_the_consumer_run`. |
 | P-01 | Alta (diseño) | Abierto y documentado | `security/service.py`, almacenes y gestores de versiones, módulos, plugins, copias y configuración | La API del núcleo, sin token, puede crear cuentas con cualquier rol, cambiar contraseñas sin la anterior, cambiar roles, deshabilitar cuentas, activar versiones, habilitar plugins y restaurar copias. Ver la sección 5. | Estática. La terminal solo las usa con el guardián (`run` o `check_scope`). |
+| P-05 | Alta | Corregido en la etapa 3 (fase A). No estaba recogido en esta auditoría | `plugins/trust.py`, `plugins/manager.py`, `core/contracts.py`, `storage/migrations.py` (migración 9) | Dar de alta, revocar y revisar editores de confianza no exigía sesión, permiso ni auditoría. Ver la sección 3.1. | Dinámica: `tests/test_editores_confianza.py` (18 pruebas). Tres mutaciones detectadas, con 7 pruebas en rojo. |
 | A-08 | Baja | Documentado | `security/installer.py`, `issue_code` | Cada emisión reinicia `code_failed_attempts`. El límite de cinco intentos es por código, no por instalación. Con 128 bits de entropía no es explotable en la práctica. Quien pueda llamar a `issue_code` antes de la instalación puede emitir códigos sin límite. Ya constaba en `docs/seguridad.md`. | Estática. |
 | A-09 | Baja | Documentado | `storage/outbox.py`, `_dispatch` | No hay espera entre reintentos. Cada `emit` confirmado dispara una pasada de entrega, así que los cinco intentos pueden agotarse en pocas operaciones seguidas ante un fallo transitorio. Corregirlo exige una columna de próximo intento, es decir, un cambio de esquema. | Estática y lectura del flujo de `emit` → `_dispatch`. |
 | A-10 | Baja | Documentado | `launcher.ps1` y `README.md` | Con la política de ejecución por defecto de los equipos cliente de Windows (`Restricted`), `.\launcher.ps1` no se ejecuta. El README no lo indicaba. Se añade el comando con `-ExecutionPolicy Bypass`. | Estática. Comportamiento de Windows no comprobado en este entorno. |
@@ -51,6 +54,73 @@ indica que la prueba falló con el código del commit `9a371c7`.
 | A-13 | Info | Pendiente | `main.py` | Ctrl+C produce un rastreo de error. `kernel.stop()` se ejecuta en `finally`, y `Database.transaction` revierte ante cualquier excepción, así que no se pierden datos confirmados. | Estática. |
 | A-14 | Info | Documentado | `main.py`, `interfaces/terminal/app.py` | Si la salida se redirige a un archivo en Windows, los caracteres fuera de la página de códigos del sistema pueden provocar un error de codificación. | Estática. No comprobado en Windows. |
 | A-15 | Info | Documentado | `security/accounts.py`, `check_password` | «Cuenta deshabilitada» se devuelve solo tras una contraseña correcta. Revela el estado de la cuenta solo a quien ya conoce la contraseña. | Estática. |
+
+### 3.1 P-05: editores de confianza sin control (corregido en la etapa 3)
+
+**Origen.** P-05 figura en la auditoría de arquitectura (`docs/CLAUDE_ARCHITECTURE_AUDIT.md`) como
+prioridad inmediata. Esta auditoría no lo recogió. Se corrige en la fase A de la etapa 3, en su
+propio commit (`ed7e41c`).
+
+**Riesgo original.** `TrustStore.add_publisher` y `TrustStore.revoke` inscribían o revocaban
+editores sin sesión, sin permiso y sin auditoría. `PluginManager.revoke_publisher` y
+`PluginManager.record_review` tampoco pedían token. La revisión aprobada habilita los plugins de
+terceros, así que cualquier código con la instancia podía aprobar un paquete sin revisión.
+
+**Puntos de entrada encontrados** (búsqueda sobre `src/` y `tests/`):
+
+| Punto de entrada | Estado original | Estado tras la corrección |
+|---|---|---|
+| `TrustStore.add_publisher` | Público, sin control | Eliminado. La escritura es `_insert`, interna y dentro de la transacción autorizada. |
+| `TrustStore.revoke` | Público, sin control | Eliminado. La escritura es `_revoke`, interna. |
+| `PluginManager.revoke_publisher(key_id)` | Sin token | `revoke_publisher(token, key_id, confirmed)`, por la puerta de operaciones. |
+| `PluginManager.record_review(...)` | Sin token. El revisor era un texto libre. | `record_review(token, ...)`. El revisor es la cuenta de la sesión. |
+| `ReviewLog.record` | Público, sin control | Sigue accesible desde el proceso (P-01). `PluginManager` ya no lo llama sin guardián. |
+| Terminal | No tenía opciones de editores ni de revisión | Sin cambios. |
+| `tests/conftest.py` | Alta directa en el almacén | Usa la API protegida con la cuenta de la plataforma. |
+
+**Correcciones.**
+
+- Los permisos `plugins:nucleo:editor:administrar` y `plugins:nucleo:revision:administrar` son
+  críticos. Exigen sesión válida, ámbito de plataforma, confirmación explícita y reautenticación
+  reciente. Una cuenta de empresa queda fuera aunque tenga el rol `administrador`.
+- La escritura y su auditoría van en una sola transacción: `plugin.publisher_registered`,
+  `plugin.publisher_revoked` y `plugin.reviewed`. La comprobación de duplicados y la de revocación
+  están dentro de esa transacción, así que dos operaciones simultáneas no pueden confirmarse las dos.
+- Migración 9, reversible: la clave pública de un editor es inmutable, un editor revocado no vuelve
+  a estar activo y los editores no se borran. Son reglas de la base, independientes del código.
+- Una revocación repetida se rechaza. El revisor y el responsable de la revocación se toman de la
+  sesión, no de un texto libre.
+- Un paquete no puede declarar su propio nivel de confianza: el manifiesto rechaza campos
+  desconocidos.
+- Escalada: un operador no puede aprobarse a sí mismo un permiso temporal de confianza. La aprobación
+  la hace otra cuenta.
+
+**Alta, cambio y revocación.** El único cambio de estado de un editor es la revocación. No hay una
+operación para cambiar el nivel de un editor. Si se añade, debe pasar por `PluginManager` y
+auditarse en la misma transacción.
+
+**Evidencia.**
+
+- `tests/test_editores_confianza.py`: 18 pruebas. Positivas: alta y revocación con la cuenta que las
+  hace. Negativas: operador, auditor, administradora de empresa, sesión inválida, sin confirmación y
+  sin reautenticación. Escalada: autoaprobación de un permiso temporal y manifiesto que declara
+  confianza. Persistencia: clave inmutable, sin borrado y sin reactivación con SQL. Concurrencia: dos
+  altas y dos revocaciones simultáneas con conexiones distintas. Regresión: sin escritura pública y
+  permisos críticos.
+- Mutaciones sobre copias de trabajo: sin puerta de operaciones fallan 5 pruebas; sin comprobación
+  de duplicado falla la prueba de concurrencia; permitir borrar editores falla la de persistencia.
+  Los ficheros se restauraron byte a byte después.
+- Las pruebas existentes cambian solo la forma de la llamada. Sus aserciones no cambian. Las listas
+  de versiones de migración incluyen la 9.
+
+**Límites.**
+
+- Dentro del proceso, `TrustStore._insert`, `TrustStore._revoke` y `ReviewLog.record` siguen
+  siendo alcanzables con una conexión. Es P-01 (sección 5).
+- La concurrencia se prueba con dos conexiones en hilos, no con procesos separados.
+- No hay flujo de aprobación de dos personas para asignar `official`. La protección es el permiso
+  crítico, la reautenticación y la confirmación. Quien tenga el permiso puede asignar cualquier nivel.
+- Windows: no comprobado.
 
 ## 4. Revisión por áreas
 
@@ -154,7 +224,9 @@ ninguna sesión. Un código que tenga la instancia puede actuar como la platafor
 | `security.installer` | `issue_code`, `complete` | Emitir código y completar la instalación mientras esté pendiente. |
 | `versions` | `load`, `rollback` | Activar otra versión de la plataforma. |
 | `modules` | `enable`, `disable` | Cambiar módulos habilitados. |
-| `plugins` | `install_package`, `install_from_repository`, `enable`, `disable`, `uninstall`, `record_review`, `revoke_publisher` | Instalar y habilitar plugins, y revocar editores. |
+| `plugins` | `install_package`, `install_from_repository`, `enable`, `disable`, `uninstall` | Instalar y habilitar plugins. |
+| `plugins.trust` | `_insert`, `_revoke` (reciben una conexión). Lectura: `find`, `get_publisher`, `publishers` | Dar de alta o revocar editores de confianza, sin pasar por el guardián. `register_publisher` y `revoke_publisher` son las vías protegidas (P-05). |
+| `plugins.reviews` | `record` | Registrar una aprobación de revisión sin guardián, lo que habilita un plugin de terceros. `record_review` es la vía protegida (P-05). |
 | `storage/backups` | `restore` | Restaurar copias. |
 | `configuration` | `set`, `restore` | Cambiar la configuración. |
 | `audit` | `list_events(company_id=None)` | Leer la auditoría de todas las empresas. |
