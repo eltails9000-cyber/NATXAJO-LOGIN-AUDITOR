@@ -13,7 +13,9 @@ authors = [{ name = "eltails9000-cyber" }]
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+# Rangos de las versiones probadas (docs/DEPENDENCIAS.md). Ampliar un rango exige ejecutar la
+# suite con la nueva versión y actualizar requirements-dev.lock.
+dev = ["pytest>=9.1,<10", "ruff>=0.16,<0.17", "mypy>=2.3,<3"]
 
 [project.scripts]
 natxajo-auditor = "natxajo_auditor.main:main"

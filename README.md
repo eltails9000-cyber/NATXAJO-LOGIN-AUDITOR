@@ -36,11 +36,14 @@ La primera vez que se abre la terminal, con la base vacía, se muestra un códig
 ## Pruebas
 
 ```bash
-python -m pip install -e .[dev]
+python -m pip install -c requirements-dev.lock -e ".[dev]"
 python -m pytest
 python -m ruff check .
+python -m ruff format --check .
 python -m mypy
 ```
+
+Versiones probadas, rangos y limitaciones del bloqueo: `docs/DEPENDENCIAS.md`.
 
 ## Documentación
 
@@ -48,6 +51,7 @@ python -m mypy
 - `docs/arquitectura.md`: capas, ciclo de vida, decisiones (D1 a D12) y ubicación de los datos.
 - `docs/MIGRACION_ETAPA_2.md`: plan y resultados de la migración a multiempresa, instalador y bus de eventos.
 - `docs/seguridad.md`: límites de uso, controles implementados y lo que no está implementado.
+- `docs/DEPENDENCIAS.md`: rangos de desarrollo, bloqueo, versiones probadas y lo no verificado.
 - `docs/IMPLEMENTATION_STATUS.md`: estado verificado de cada fase.
 - `docs/CLAUDE_ARCHITECTURE_AUDIT.md`: auditoría de arquitectura y plan de corrección por etapas.
 - `CHANGELOG.md`: historial de cambios.
