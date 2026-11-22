@@ -11,8 +11,80 @@ interfaces  ──►  kernel  ──►  security, configuration, storage, vers
 - `versioning` usa `storage` (base de datos y auditoría) y `core`.
 - `security` usa `storage` y `core`. El actor de cada operación sale de la base de datos, nunca de la
   entrada del usuario.
-- `kernel` compone los servicios. Es el único que conoce cómo se arrancan.
-- `interfaces` solo consume servicios del núcleo. No contiene reglas de negocio.
+- `kernel` compone los servicios en `kernel/composition.py`, el único módulo del núcleo que conoce
+  los subsistemas concretos. Sus accesores leen los servicios con claves tipadas (`ServiceKey`) y
+  no usan `cast`. Solo `composition.py` importa subsistemas en tiempo de ejecución; `kernel.py` los
+  nombra únicamente en anotaciones de tipo.
+- `modules` y `plugins` solo importan `core` y `storage`. Consumen contratos públicos de `core`.
+- `interfaces` solo consume servicios del núcleo. No importa `security` ni `storage`. No contiene
+  reglas de negocio.
+
+## Reglas de dependencia
+
+Verificadas por `tests/test_arquitectura.py` con análisis AST. Cada paquete solo puede importar los
+paquetes de su fila, en tiempo de ejecución o en anotaciones de tipo. Cualquier otra importación
+hace fallar la suite, y también los ciclos y la importación relativa.
+
+| Paquete | Puede importar |
+|---|---|
+| `core` | ninguno |
+| `storage` | `core` |
+| `configuration` | `core`, `storage` |
+| `versioning` | `core`, `storage` |
+| `security` | `core`, `storage` |
+| `modules` | `core`, `storage` |
+| `plugins` | `core`, `storage` |
+| `kernel` | `core`, `configuration`, `modules`, `plugins`, `security`, `storage`, `versioning` |
+| `interfaces` | `core`, `kernel` |
+| `(raiz)` | `core`, `kernel`, `interfaces` |
+
+`(raiz)` son `main.py` y `__init__.py` del paquete raíz. Todo paquete puede importar el paquete
+raíz, que solo contiene la versión.
+
+Reglas adicionales, también verificadas:
+
+- Solo `kernel/composition.py` importa subsistemas en tiempo de ejecución. `kernel.py` no usa `cast`.
+- `modules/` y `plugins/` no usan `importlib`, `runpy`, `subprocess`, `eval`, `exec` ni funciones
+  equivalentes. La lista de excepciones autorizadas está vacía.
+- `hashlib` solo lo importan `core/utilities.py`, `core/ed25519.py` y `security/passwords.py`.
+- No hay importaciones relativas ni ciclos entre módulos del paquete.
+
+Las pruebas AST no verifican la forma de los datos que pasan entre paquetes, la ausencia de
+duplicación de lógica (grafos, permisos) ni el comportamiento en tiempo de ejecución.
+
+## Contratos compartidos
+
+Los valores que varios subsistemas comparten se definen una sola vez:
+
+- `core/contracts.py`: `PLATFORM_COMPANY` (`plataforma`), `SCOPE_DENIED`, `APPROVE_PERMISSION` y el
+  protocolo `OperationGate`, que `plugins` usa en lugar del guardián concreto.
+- `core/permissions.py`: formato de permisos, subsistemas y acciones del catálogo cerrado.
+- `core/validation.py`: validadores de manifiestos y `kernel_matches`, la regla de compatibilidad
+  de versión del núcleo.
+- `core/exceptions.py`: la jerarquía de errores, incluida `SessionError`.
+
+## Orden de arranque y parada
+
+Arranque (`compose` en `kernel/composition.py`, llamado desde `Kernel.start`):
+
+1. Carpetas de configuración y de datos.
+2. Base de datos: se abre y se registra, para que un fallo posterior la cierre.
+3. Si la base existía y tiene migraciones pendientes, copia consistente en `storage/migraciones/`.
+4. Migraciones versionadas.
+5. Outbox con el consumidor de auditoría, y auditoría.
+6. Entrega de los eventos pendientes de una parada anterior.
+7. Configuración, copias, módulos, versiones, seguridad y plugins. Seguridad va antes que plugins
+   porque el gestor de plugins necesita el guardián de operaciones.
+8. `kernel.started` en la auditoría. Solo después el núcleo pasa a `RUNNING`.
+
+Parada (`Kernel.stop`):
+
+1. `kernel.stopped` en la auditoría, antes de cerrar la base de datos.
+2. Cierre de la base de datos y limpieza del contenedor de servicios.
+
+Un fallo durante el arranque deja el núcleo en `FAILED`, cierra la base de datos si estaba abierta
+y no construye nada después del fallo. Las pruebas de `tests/test_kernel_characterization.py`
+protegen este orden.
 
 ## Ciclo de vida del núcleo
 

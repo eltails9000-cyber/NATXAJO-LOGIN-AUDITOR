@@ -8,6 +8,7 @@ detecta una infracción de muestra, para que un analizador roto no deje las regl
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -325,6 +326,18 @@ def test_hash_primitives_live_in_their_owner_modules() -> None:
         if "hashlib" in imported_roots(text) and rel not in HASH_OWNERS
     ]
     assert offenders == []
+
+
+def test_the_documented_dependency_table_matches_the_enforced_rules() -> None:
+    text = (ROOT / "docs" / "arquitectura.md").read_text(encoding="utf-8")
+    section = text.split("## Reglas de dependencia", 1)[1].split("\n## ", 1)[0]
+    documented: dict[str, set[str]] = {}
+    for line in section.splitlines():
+        if not line.startswith("| `"):
+            continue
+        name, allowed = [cell.strip() for cell in line.strip("|").split("|")]
+        documented[name.strip("`")] = set(re.findall(r"`([^`]+)`", allowed))
+    assert documented == {name: set(allowed) for name, allowed in ALLOWED.items()}
 
 
 # --- Pruebas de los analizadores: cada uno debe detectar su infracción de muestra ------------
