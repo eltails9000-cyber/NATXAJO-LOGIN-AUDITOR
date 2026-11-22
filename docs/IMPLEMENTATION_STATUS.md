@@ -5,10 +5,12 @@ aparece en el documento maestro.
 
 ## Etapa de especificación y fase del repositorio
 
-- **Etapa de especificación:** 2 (arquitectura). Se aplicaron las tres decisiones aprobadas: modelo
+- **Etapa de especificación:** 3 (kernel: composición sin acoplamiento), en la rama
+  `etapa-3-kernel-composicion`, con los ocho criterios de aceptación cumplidos (ver la sección de
+  la etapa 3). No fusionada en `main`. La etapa 2 aplicó las tres decisiones aprobadas: modelo
   multiempresa con `company_id` fijado por el servidor, instalador del primer administrador con
   código de un solo uso, y bus de eventos integrado con la auditoría. La etapa 1 (auditoría) está
-  en `docs/CLAUDE_ARCHITECTURE_AUDIT.md`. Las etapas 3 a 16 no se han iniciado.
+  en `docs/CLAUDE_ARCHITECTURE_AUDIT.md`. Las etapas 4 a 16 no se han iniciado.
 - **Fase del repositorio:** 7 (seguridad y RBAC), en estado parcial. La etapa 2 se integra en esta
   fase. Las fases 3 a 6 no cambian de estado en esta etapa.
 
@@ -26,7 +28,7 @@ aparece en el documento maestro.
 | Fase | Contenido | Estado |
 |---|---|---|
 | 1 | Inspección, diagnóstico, arquitectura y documentación | VERIFICADO (documentación en `docs/`) |
-| 2 | Núcleo, ciclo de vida, contenedor de servicios, bus de eventos | VERIFICADO |
+| 2 | Núcleo, ciclo de vida, contenedor de servicios, bus de eventos. Composición y accesos tipados en la etapa 3 | VERIFICADO |
 | 3 | Configuración, almacenamiento, migraciones, copias | PARCIAL |
 | 4 | Gestor de versiones y cargador manual | PARCIAL |
 | 5 | Sistema de módulos y dependencias | VERIFICADO (los módulos no ejecutan código) |
@@ -39,10 +41,12 @@ aparece en el documento maestro.
 | 12 | Mantenimiento, actualizaciones y recuperación | PENDIENTE |
 | 13 | Pruebas integrales y distribución | PENDIENTE |
 
-Pruebas automatizadas: 279 casos (214 de la etapa 1, de las que 4 cambiaron de procedimiento o de
-expectativa; 48 nuevas de la etapa 2; y 17 de la auditoría posterior a la etapa 2, en
-`tests/test_auditoria_postimplementacion.py`), con ruff y mypy en modo estricto sin errores.
-Verificadas en Linux. Windows no está verificado (ver `docs/PRUEBAS_WINDOWS.md`).
+Pruebas automatizadas: 325 casos. Desglose: 279 de las etapas 1 y 2 y de la auditoría posterior
+(214 de la etapa 1, de las que 4 cambiaron de procedimiento o de expectativa; 48 de la etapa 2;
+17 de la auditoría posterior, en `tests/test_auditoria_postimplementacion.py`); 18 de editores de
+confianza (P-05); 5 de dependencias (P-17); 7 de caracterización del kernel; 16 de arquitectura.
+Ruff y mypy en modo estricto sin errores. Verificadas en Linux con Python 3.13.18 y 3.11.18.
+Windows no está verificado (ver `docs/PRUEBAS_WINDOWS.md`).
 
 ## Fase 3: configuración y almacenamiento (PARCIAL)
 
@@ -192,6 +196,51 @@ Verificadas en Linux. Windows no está verificado (ver `docs/PRUEBAS_WINDOWS.md`
 
 Detalle de límites y de qué protege cada control: `docs/seguridad.md`.
 
+## Etapa 3: kernel, composición sin acoplamiento (CRITERIOS CUMPLIDOS EN LA RAMA)
+
+Rama `etapa-3-kernel-composicion`, desde la etapa 2. Orden del trabajo: P-05, después P-17 y
+después el desacoplamiento del kernel, en commits separados.
+
+| Fase | Commits | Contenido |
+|---|---|---|
+| A (P-05) | `ed7e41c`, `00da963` | Editores de confianza protegidos en el servicio y en la base |
+| B (auditoría) | `00da963` | `AUDITORIA_ETAPA_2.md`, `seguridad.md` e `IMPLEMENTATION_STATUS.md` |
+| C (P-17) | `bb1d97f` | Rangos probados, bloqueo reproducible y documentación de versiones |
+| D (kernel) | `8e3154c`, `c71940e`, `da82f4b` | Caracterización, factoría y retirada del bus del kernel |
+| E (reglas) | `3f42ff2`, `257ab62`, `50e7b69` | Dependencias corregidas, pruebas AST y documentación |
+
+Criterios de aceptación (sección 13 de `docs/CLAUDE_ARCHITECTURE_AUDIT.md`):
+
+| Criterio | Evidencia | Estado |
+|---|---|---|
+| `kernel.start` no importa subsistemas concretos | `kernel.py` no los importa en tiempo de ejecución. `compose` está en `kernel/composition.py`. Prueba `test_only_the_composition_module_imports_subsystems_at_runtime` | CUMPLIDO |
+| Orden de arranque y cierre protegido por pruebas | `tests/test_kernel_characterization.py`, 7 casos. Mutaciones: copia siempre (2 fallos), parada sin registro (1), despacho tardío (1) y despacho eliminado en la composición (1) | CUMPLIDO |
+| Accesores tipados sin `cast` | `ServiceKey[T]` con `put` y `fetch`, que comprueban la clase. Prueba `test_the_kernel_does_not_use_cast` | CUMPLIDO |
+| Sin bus de eventos redundante en el kernel | `kernel/event_bus.py` eliminado. Prueba `test_the_kernel_has_no_second_event_bus`. `core/events.py` y el outbox se conservan | CUMPLIDO |
+| Reglas de dependencia documentadas y verificadas | Tabla en `docs/arquitectura.md`, comparada con las reglas por una prueba. 16 pruebas AST. Mutaciones detectadas | CUMPLIDO. Alcance: importaciones, ciclos, ejecución dinámica y hashlib |
+| `ServiceContainer` conserva compatibilidad | `register`, `get`, `has`, `names` y `clear` por nombre sin cambios. Los `SERVICE_*` siguen importables desde `kernel.kernel` | CUMPLIDO |
+| No se rompe el aislamiento multiempresa | Las pruebas de empresas, de editores de confianza y de auditoría posterior pasan sin cambios de aserción | CUMPLIDO (suite existente) |
+| P-01 documentado y plugins externos bloqueados | P-01 sigue abierto en `docs/AUDITORIA_ETAPA_2.md` (sección 5) y en `docs/seguridad.md`. No hay ejecución de plugins | CUMPLIDO. Riesgo abierto |
+
+Riesgos abiertos:
+
+- P-01: la API interna del núcleo no pide token. `TrustStore._insert`, `TrustStore._revoke` y
+  `ReviewLog.record` siguen accesibles dentro del proceso.
+- Windows no está verificado (`docs/PRUEBAS_WINDOWS.md`).
+- El bloqueo `requirements-dev.lock` no tiene hashes. Su instalación desde el índice no se ha
+  verificado, porque el entorno no tiene red.
+- `Database.snapshot` no genera manifiesto de copia (previsto en la etapa 9).
+- La auditoría no tiene integridad criptográfica.
+- `operation.executed` se registra fuera de la transacción de la operación (limitación previa).
+- `kernel.py` nombra subsistemas en anotaciones de tipo, bajo `TYPE_CHECKING`. No los importa en
+  tiempo de ejecución.
+- Las pruebas AST no cubren la forma de los datos que pasan entre paquetes ni la duplicación de
+  lógica (grafos, permisos).
+
+Verificación final: 325 pruebas en Python 3.13.18 y 3.11.18 (Linux), ruff check, ruff format
+--check y mypy estricto (61 archivos). Instalación no editable del paquete en 3.11, sin
+dependencias.
+
 ## Auditoría posterior a la etapa 2
 
 `docs/AUDITORIA_ETAPA_2.md` revisa el commit `9a371c7`. Corregidos siete defectos con pruebas de
@@ -226,7 +275,9 @@ Hallazgos prioritarios:
 
 - Carpetas `powershell/` y `scripts/`: no se crean vacías. Se añadirán con su contenido.
 - `launcher.ps1` no se ha probado en Windows. No hay PowerShell en el entorno de desarrollo.
-- Instalación de dependencias (`pip install -e .[dev]`): no comprobada en este entorno.
+- Instalación con el bloqueo (`requirements-dev.lock`) desde el índice: no verificada, porque el
+  entorno no tiene red. La instalación del proyecto sin dependencias sí está verificada en Python
+  3.11. Ver `docs/DEPENDENCIAS.md`.
 
 ## Cómo añadir una fase
 

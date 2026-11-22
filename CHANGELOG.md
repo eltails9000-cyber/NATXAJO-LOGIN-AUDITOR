@@ -14,6 +14,31 @@
     ya no existen como método de `TrustStore`.
   - Pruebas: 18 nuevas en `tests/test_editores_confianza.py`.
 
+- Etapa 3, fase C (P-17): dependencias de desarrollo con rangos probados y bloqueo reproducible.
+  - Rangos: pytest `>=9.1,<10`, ruff `>=0.16,<0.17`, mypy `>=2.3,<3`. Python 3.11 mínimo.
+  - `requirements-dev.lock` fija las versiones y sus dependencias. Sin hashes: pendiente de
+    generar con acceso al índice.
+  - Pruebas: 5 nuevas en `tests/test_dependencias.py`. Procedimiento en `docs/DEPENDENCIAS.md`.
+
+- Etapa 3, fase D (kernel): composición sin acoplamiento. Sin cambio de comportamiento.
+  - Pruebas de caracterización del orden de arranque y de parada (`tests/test_kernel_characterization.py`).
+  - `kernel/composition.py` construye los servicios. `Kernel.start` ya no importa subsistemas.
+  - `ServiceKey[T]`: registro y consulta tipados, con comprobación de clase. Los accesores del
+    kernel no usan `cast`. `register` y `get` por nombre se conservan.
+  - Retirado `kernel.events` (`kernel/event_bus.py`). El registro de arranque y de parada sigue en
+    la auditoría, a través del outbox.
+
+- Etapa 3, fase E (arquitectura): dependencias indebidas corregidas.
+  - `security/permissions.py` pasa a `core/permissions.py`. `SessionError` pasa a
+    `core/exceptions.py`. `PLATFORM_COMPANY`, `SCOPE_DENIED` y `APPROVE_PERMISSION` pasan a
+    `core/contracts.py`. `kernel_matches` pasa a `core/validation.py`.
+  - La terminal ya no importa `security`. `Installer` expone `code_ttl` y `max_code_attempts`.
+  - Cambio de rutas de importación: quien importe estos símbolos desde su módulo anterior debe
+    cambiar la importación.
+  - `tests/test_arquitectura.py`: 16 pruebas AST sobre capas, subsistemas en la composición,
+    ciclos, `cast`, ejecución dinámica en `modules/` y `plugins/`, hashlib y la tabla de
+    `docs/arquitectura.md`.
+
 - Auditoría posterior a la etapa 2 (`docs/AUDITORIA_ETAPA_2.md`):
   - Corregido: el guardián no comprobaba el ámbito de empresa cuando una operación no indicaba
     empresa. Ahora una operación sin empresa es de plataforma.

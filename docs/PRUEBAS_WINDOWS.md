@@ -74,7 +74,8 @@ Ejecute las comprobaciones desde la carpeta del proyecto:
 .\.venv311\Scripts\python.exe -m mypy --strict src
 ```
 
-Resultado esperado en el commit auditado: 279 pruebas aprobadas, sin errores de Ruff ni de mypy.
+Resultado esperado en la rama `etapa-3-kernel-composicion`: 325 pruebas aprobadas, sin errores de
+Ruff ni de mypy. Estas cifras son las de Linux con Python 3.13 y 3.11.
 Repita con Python 3.13 (`py -3.13 -m venv .venv313`). Si una prueba falla solo en Windows, no la
 marque como fallo de código sin antes revisar la causa: anótela con el mensaje completo.
 
