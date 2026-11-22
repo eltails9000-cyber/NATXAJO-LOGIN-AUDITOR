@@ -1,10 +1,10 @@
+import importlib.util
 from pathlib import Path
 
 import pytest
 
 from natxajo_auditor.core.exceptions import LifecycleError, ServiceError
 from natxajo_auditor.kernel.context import RuntimeContext
-from natxajo_auditor.kernel.event_bus import EventBus
 from natxajo_auditor.kernel.kernel import SERVICE_VERSIONS, Kernel
 from natxajo_auditor.kernel.lifecycle import Lifecycle, LifecycleState
 from natxajo_auditor.kernel.service_container import ServiceContainer
@@ -61,14 +61,14 @@ def test_service_container_rejects_duplicates_and_missing() -> None:
     assert container.get("a") == 1
 
 
-def test_event_bus_runs_handlers_once_in_order() -> None:
-    bus = EventBus()
-    calls: list[tuple[str, object]] = []
-
-    def handler(name: str, payload: object) -> None:
-        calls.append((name, payload))
-
-    bus.subscribe("evento", handler)
-    bus.subscribe("evento", handler)
-    bus.publish("evento", 7)
-    assert calls == [("evento", 7)]
+def test_the_kernel_has_no_second_event_bus(context: RuntimeContext) -> None:
+    # El bus en memoria del núcleo se retiró. Los eventos del núcleo se registran en el outbox
+    # transaccional y en la auditoría. Esta prueba impide reintroducir el atributo o el módulo.
+    kernel = Kernel(context)
+    kernel.start()
+    try:
+        assert not hasattr(kernel, "events")
+        assert importlib.util.find_spec("natxajo_auditor.kernel.event_bus") is None
+        assert kernel.audit.events_of_type("kernel.started")
+    finally:
+        kernel.stop()

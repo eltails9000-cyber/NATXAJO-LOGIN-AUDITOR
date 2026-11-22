@@ -3,6 +3,17 @@
 Este documento sustituye a `docs/roadmap.md`. Describe lo que existe en el código, no lo que
 aparece en el documento maestro.
 
+## Etapa de especificación y fase del repositorio
+
+- **Etapa de especificación:** 3 (kernel: composición sin acoplamiento), en la rama
+  `etapa-3-kernel-composicion`, con los ocho criterios de aceptación cumplidos (ver la sección de
+  la etapa 3). No fusionada en `main`. La etapa 2 aplicó las tres decisiones aprobadas: modelo
+  multiempresa con `company_id` fijado por el servidor, instalador del primer administrador con
+  código de un solo uso, y bus de eventos integrado con la auditoría. La etapa 1 (auditoría) está
+  en `docs/CLAUDE_ARCHITECTURE_AUDIT.md`. Las etapas 4 a 16 no se han iniciado.
+- **Fase del repositorio:** 7 (seguridad y RBAC), en estado parcial. La etapa 2 se integra en esta
+  fase. Las fases 3 a 6 no cambian de estado en esta etapa.
+
 ## Estados
 
 - **VERIFICADO**: implementado y cubierto por pruebas automatizadas que pasan.
@@ -17,12 +28,12 @@ aparece en el documento maestro.
 | Fase | Contenido | Estado |
 |---|---|---|
 | 1 | Inspección, diagnóstico, arquitectura y documentación | VERIFICADO (documentación en `docs/`) |
-| 2 | Núcleo, ciclo de vida, contenedor de servicios, bus de eventos | VERIFICADO |
+| 2 | Núcleo, ciclo de vida, contenedor de servicios, bus de eventos. Composición y accesos tipados en la etapa 3 | VERIFICADO |
 | 3 | Configuración, almacenamiento, migraciones, copias | PARCIAL |
 | 4 | Gestor de versiones y cargador manual | PARCIAL |
 | 5 | Sistema de módulos y dependencias | VERIFICADO (los módulos no ejecutan código) |
 | 6 | Plugins: firma, integridad, editores, catálogo, revisión y ciclo de vida | PARCIAL |
-| 7 | Seguridad, RBAC, sesiones y guardián de operaciones | PARCIAL |
+| 7 | Seguridad, RBAC, sesiones, guardián, multiempresa, instalador y bus de eventos (etapa 2) | PARCIAL |
 | 8 | Motor de automatización | PENDIENTE |
 | 9 | Motor de auditoría defensiva | PENDIENTE |
 | 10 | Aplicación de escritorio y terminal avanzada | PENDIENTE |
@@ -30,7 +41,12 @@ aparece en el documento maestro.
 | 12 | Mantenimiento, actualizaciones y recuperación | PENDIENTE |
 | 13 | Pruebas integrales y distribución | PENDIENTE |
 
-Pruebas automatizadas: 213 casos, con ruff y mypy en modo estricto sin errores.
+Pruebas automatizadas: 325 casos. Desglose: 279 de las etapas 1 y 2 y de la auditoría posterior
+(214 de la etapa 1, de las que 4 cambiaron de procedimiento o de expectativa; 48 de la etapa 2;
+17 de la auditoría posterior, en `tests/test_auditoria_postimplementacion.py`); 18 de editores de
+confianza (P-05); 5 de dependencias (P-17); 7 de caracterización del kernel; 16 de arquitectura.
+Ruff y mypy en modo estricto sin errores. Verificadas en Linux con Python 3.13.18 y 3.11.18.
+Windows no está verificado (ver `docs/PRUEBAS_WINDOWS.md`).
 
 ## Fase 3: configuración y almacenamiento (PARCIAL)
 
@@ -83,7 +99,10 @@ Pruebas automatizadas: 213 casos, con ruff y mypy en modo estricto sin errores.
   vuelve a verificar la copia almacenada), deshabilitar (bloqueado si otro habilitado lo
   requiere), desinstalar (bloqueado si está habilitado o si otro instalado lo requiere).
 - **Revocación:** revocar un editor deshabilita sus plugins y los que dependen de ellos,
-  transitivamente.
+  transitivamente. Un editor revocado no vuelve a estar activo, ni siquiera con SQL (migración 9).
+- **Confianza protegida (P-05):** alta, revocación y revisión solo con la cuenta de la plataforma,
+  con permiso crítico, confirmación y reautenticación. Pruebas en
+  `tests/test_editores_confianza.py`.
 - **Auditoría:** instalaciones, rechazos, habilitaciones, deshabilitaciones, desinstalaciones,
   revisiones y revocaciones quedan en `audit_events`.
 - **Persistencia:** el estado sobrevive a un reinicio del núcleo.
@@ -118,13 +137,44 @@ Pruebas automatizadas: 213 casos, con ruff y mypy en modo estricto sin errores.
   permiso concedido, sin autoaprobación, rechazo, revocación y caducidad.
 - **Guardián de operaciones:** comprueba sesión, permiso, confirmación y reautenticación reciente
   para las operaciones críticas; registra denegaciones y ejecuciones en la auditoría.
-- **Terminal:** creación del primer administrador, inicio de sesión con tres intentos, caducidad que
-  vuelve a la pantalla de inicio, menú filtrado por permisos, confirmación y reautenticación para las
-  opciones críticas. Opciones 14 a 17: crear cuenta, solicitar permiso temporal, aprobar o rechazar
-  permiso temporal, y reautenticar.
+- **Terminal:** instalación del primer administrador con código, inicio de sesión con tres intentos,
+  caducidad que vuelve a la pantalla de inicio, menú filtrado por permisos y por empresa,
+  confirmación y reautenticación para las opciones críticas. Opciones 14 a 19: crear cuenta,
+  solicitar permiso temporal, aprobar o rechazar permiso temporal, reautenticar, crear empresa y
+  listar empresas.
 - **Migración 5:** tablas `accounts`, `roles`, `role_grants`, `role_parents`, `account_roles`,
-  `permission_grants` y `sessions`.
+  `permission_grants` y `sessions`. Migraciones 6 a 8: empresas, instalación y bus de eventos (ver
+  la etapa 2 más abajo).
 - **Pruebas:** 39 casos en `tests/test_security.py`, más las pruebas de terminal.
+
+### Etapa 2 de la especificación (VERIFICADO)
+
+- **Multiempresa.** Tabla `companies` con la empresa reservada `plataforma`. Cada cuenta tiene
+  `company_id`, fijado al crearla. Un disparador impide cambiarlo y no permite borrar empresas con
+  cuentas ni la plataforma. El actor de cada operación sale de la cuenta en la base de datos, nunca
+  de la entrada del usuario. Una cuenta de empresa solo actúa sobre su empresa; la plataforma actúa
+  sobre todas.
+- **Ámbito en el guardián y en el almacén.** `OperationGuard` comprueba el ámbito antes de pedir
+  confirmación. Las solicitudes de permisos temporales, sus aprobaciones, rechazos y revocaciones
+  comprueban el ámbito de la cuenta afectada. En la terminal, una cuenta inexistente y una ajena dan
+  el mismo mensaje fuera de la plataforma. La API sigue distinguiendo los dos casos.
+- **Permisos administrativos.** Crear empresas exige `seguridad:nucleo:empresa:administrar`, es
+  crítico y solo lo ejecuta la plataforma. Una cuenta de empresa crea cuentas solo en su empresa.
+- **Instalador.** Código de 128 bits, guardado solo como hash PBKDF2, válido 30 minutos y con cinco
+  intentos fallidos como máximo. Un solo uso. Al completarse, la instalación queda cerrada por un
+  disparador. Mientras no se completa, no se pueden crear cuentas.
+- **Bus de eventos.** Catálogo cerrado de 34 tipos, cada uno con sus claves obligatorias y
+  opcionales. Outbox transaccional: el evento se guarda en la misma transacción que el cambio y se
+  entrega tras confirmarla. Consumidores idempotentes con registro de entregas, reintentos, cola de
+  fallidos y reenvío al arrancar. La auditoría es un consumidor más.
+- **Categorías.** `operativo` (cambios de la plataforma) y `seguridad` (cuentas, sesiones, permisos,
+  operaciones e instalación). La auditoría se puede filtrar por categoría y por empresa.
+- **Migraciones 6 a 8.** Reversibles. Copia previa de la base antes de migrar una base existente.
+  Plan y resultados en `docs/MIGRACION_ETAPA_2.md`.
+- **Verificación.** Pruebas de aislamiento, instalación, permisos administrativos, bus de eventos y
+  migraciones (48 casos). Además, seis fallos introducidos a propósito en una copia de trabajo; cinco
+  los detectaron las pruebas de inmediato y el sexto, la falta de registro de entregas, llevó a
+  añadir una prueba que ahora lo detecta.
 
 ### Pendiente
 
@@ -138,9 +188,71 @@ Pruebas automatizadas: 213 casos, con ruff y mypy en modo estricto sin errores.
 - **Aplicación de permisos a módulos y plugins.** Los permisos que declaran se validan en el formato
   `subsistema:modulo:recurso:accion`, pero no se aplican porque no existe ejecución de módulos ni
   plugins.
-- **Multiempresa.** No hay separación entre empresas, aplicaciones ni entornos.
+- **Multiempresa (parcial).** Las empresas existen, pero no hay aplicaciones ni entornos. Las
+  operaciones de instalación (versiones, módulos, plugins, copias) son de la plataforma. Quedan
+  pendientes la desactivación de empresas y los roles propios de cada empresa.
+- **Terminal de eventos fallidos.** La cola de eventos fallidos se consulta por API, pero la terminal
+  no la muestra ni la reencola.
 
 Detalle de límites y de qué protege cada control: `docs/seguridad.md`.
+
+## Etapa 3: kernel, composición sin acoplamiento (CRITERIOS CUMPLIDOS EN LA RAMA)
+
+Rama `etapa-3-kernel-composicion`, desde la etapa 2. Orden del trabajo: P-05, después P-17 y
+después el desacoplamiento del kernel, en commits separados.
+
+| Fase | Commits | Contenido |
+|---|---|---|
+| A (P-05) | `ed7e41c`, `00da963` | Editores de confianza protegidos en el servicio y en la base |
+| B (auditoría) | `00da963` | `AUDITORIA_ETAPA_2.md`, `seguridad.md` e `IMPLEMENTATION_STATUS.md` |
+| C (P-17) | `bb1d97f` | Rangos probados, bloqueo reproducible y documentación de versiones |
+| D (kernel) | `8e3154c`, `c71940e`, `da82f4b` | Caracterización, factoría y retirada del bus del kernel |
+| E (reglas) | `3f42ff2`, `257ab62`, `50e7b69` | Dependencias corregidas, pruebas AST y documentación |
+
+Criterios de aceptación (sección 13 de `docs/CLAUDE_ARCHITECTURE_AUDIT.md`):
+
+| Criterio | Evidencia | Estado |
+|---|---|---|
+| `kernel.start` no importa subsistemas concretos | `kernel.py` no los importa en tiempo de ejecución. `compose` está en `kernel/composition.py`. Prueba `test_only_the_composition_module_imports_subsystems_at_runtime` | CUMPLIDO |
+| Orden de arranque y cierre protegido por pruebas | `tests/test_kernel_characterization.py`, 7 casos. Mutaciones: copia siempre (2 fallos), parada sin registro (1), despacho tardío (1) y despacho eliminado en la composición (1) | CUMPLIDO |
+| Accesores tipados sin `cast` | `ServiceKey[T]` con `put` y `fetch`, que comprueban la clase. Prueba `test_the_kernel_does_not_use_cast` | CUMPLIDO |
+| Sin bus de eventos redundante en el kernel | `kernel/event_bus.py` eliminado. Prueba `test_the_kernel_has_no_second_event_bus`. `core/events.py` y el outbox se conservan | CUMPLIDO |
+| Reglas de dependencia documentadas y verificadas | Tabla en `docs/arquitectura.md`, comparada con las reglas por una prueba. 16 pruebas AST. Mutaciones detectadas | CUMPLIDO. Alcance: importaciones, ciclos, ejecución dinámica y hashlib |
+| `ServiceContainer` conserva compatibilidad | `register`, `get`, `has`, `names` y `clear` por nombre sin cambios. Los `SERVICE_*` siguen importables desde `kernel.kernel` | CUMPLIDO |
+| No se rompe el aislamiento multiempresa | Las pruebas de empresas, de editores de confianza y de auditoría posterior pasan sin cambios de aserción | CUMPLIDO (suite existente) |
+| P-01 documentado y plugins externos bloqueados | P-01 sigue abierto en `docs/AUDITORIA_ETAPA_2.md` (sección 5) y en `docs/seguridad.md`. No hay ejecución de plugins | CUMPLIDO. Riesgo abierto |
+
+Riesgos abiertos:
+
+- P-01: la API interna del núcleo no pide token. `TrustStore._insert`, `TrustStore._revoke` y
+  `ReviewLog.record` siguen accesibles dentro del proceso.
+- Windows no está verificado (`docs/PRUEBAS_WINDOWS.md`).
+- El bloqueo `requirements-dev.lock` no tiene hashes. Su instalación desde el índice no se ha
+  verificado, porque el entorno no tiene red.
+- `Database.snapshot` no genera manifiesto de copia (previsto en la etapa 9).
+- La auditoría no tiene integridad criptográfica.
+- `operation.executed` se registra fuera de la transacción de la operación (limitación previa).
+- `kernel.py` nombra subsistemas en anotaciones de tipo, bajo `TYPE_CHECKING`. No los importa en
+  tiempo de ejecución.
+- Las pruebas AST no cubren la forma de los datos que pasan entre paquetes ni la duplicación de
+  lógica (grafos, permisos).
+
+Verificación final: 325 pruebas en Python 3.13.18 y 3.11.18 (Linux), ruff check, ruff format
+--check y mypy estricto (61 archivos). Instalación no editable del paquete en 3.11, sin
+dependencias.
+
+## Auditoría posterior a la etapa 2
+
+`docs/AUDITORIA_ETAPA_2.md` revisa el commit `9a371c7`. Corregidos siete defectos con pruebas de
+regresión: el guardián sin empresa (A-01), el contador de fallos y el bloqueo bajo concurrencia
+(A-02, A-03), la doble resolución de permisos temporales (A-04), el límite de sesiones (A-05), la
+doble entrega del bus (A-06) y los permisos de los consumidores (A-07). Abierto: P-01, la API
+interna del núcleo sin token. Riesgo aceptado hasta la etapa 8, y condición para ejecutar módulos o
+plugins. Windows no está verificado.
+
+Etapa 3, fase A: P-05 (editores de confianza sin control) estaba fuera de la auditoría anterior. Se
+corrige con la puerta de operaciones, transacciones, auditoría y la migración 9. Ver
+`docs/AUDITORIA_ETAPA_2.md`, sección 3.1.
 
 ## Auditoría de arquitectura (etapa 1)
 
@@ -154,12 +266,18 @@ Hallazgos prioritarios:
   auditoría.
 - **P1:** la base de datos no tiene copia de seguridad desde la aplicación.
 - **Corregido:** durante un bloqueo, la respuesta revelaba que la cuenta existía.
+- **Corregido en la etapa 2:** P-04, el primer administrador se creaba sin código; ahora lo crea el
+  instalador. Los cambios de estado, contraseña y roles de cuentas, y las reautenticaciones y
+  caducidades de sesión, se escriben y auditan en una transacción.
+- **Abierto:** P-01, la API del kernel sin token sigue siendo de confianza. Previsto para la etapa 8.
 
 ## Otros pendientes
 
 - Carpetas `powershell/` y `scripts/`: no se crean vacías. Se añadirán con su contenido.
 - `launcher.ps1` no se ha probado en Windows. No hay PowerShell en el entorno de desarrollo.
-- Instalación de dependencias (`pip install -e .[dev]`): no comprobada en este entorno.
+- Instalación con el bloqueo (`requirements-dev.lock`) desde el índice: no verificada, porque el
+  entorno no tiene red. La instalación del proyecto sin dependencias sí está verificada en Python
+  3.11. Ver `docs/DEPENDENCIAS.md`.
 
 ## Cómo añadir una fase
 

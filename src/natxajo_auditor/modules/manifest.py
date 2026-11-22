@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from natxajo_auditor.core.exceptions import ValidationError
+from natxajo_auditor.core.permissions import validate_declared
 from natxajo_auditor.core.validation import (
     require_identifier,
     require_semver,
     require_string_list,
     require_text,
 )
-from natxajo_auditor.security.permissions import validate_declared
 
 MODULE_FILE = "module.json"
 REQUIRED_FIELDS = frozenset({"id", "name", "version", "description"})

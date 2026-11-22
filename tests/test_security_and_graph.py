@@ -4,17 +4,17 @@ import pytest
 
 from natxajo_auditor.core.exceptions import ValidationError
 from natxajo_auditor.core.graph import dependents_of, resolve_load_order
+from natxajo_auditor.core.permissions import (
+    Permission,
+    covers,
+    parse_permission,
+    validate_declared,
+)
 from natxajo_auditor.core.validation import (
     require_identifier,
     require_kernel_pattern,
     require_semver,
     require_string_list,
-)
-from natxajo_auditor.security.permissions import (
-    Permission,
-    covers,
-    parse_permission,
-    validate_declared,
 )
 
 

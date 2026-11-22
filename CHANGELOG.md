@@ -2,6 +2,78 @@
 
 ## [Sin publicar]
 
+- Etapa 3, fase A (P-05): editores de confianza protegidos en el servicio y en la base.
+  - Dar de alta (`register_publisher`), revocar (`revoke_publisher`) y revisar un plugin de
+    terceros (`record_review`) exigen sesión, un permiso crítico, ámbito de plataforma,
+    confirmación y reautenticación. El revisor y quien revoca son la cuenta de la sesión.
+  - Auditoría: `plugin.publisher_registered` (nuevo), `plugin.publisher_revoked` (con el usuario) y
+    `plugin.reviewed`, en la misma transacción que el cambio.
+  - Migración 9, reversible: la clave de un editor no cambia, un editor revocado no vuelve a estar
+    activo y los editores no se borran.
+  - Cambio incompatible: `revoke_publisher` y `record_review` reciben el token de sesión. Las altas
+    ya no existen como método de `TrustStore`.
+  - Pruebas: 18 nuevas en `tests/test_editores_confianza.py`.
+
+- Etapa 3, fase C (P-17): dependencias de desarrollo con rangos probados y bloqueo reproducible.
+  - Rangos: pytest `>=9.1,<10`, ruff `>=0.16,<0.17`, mypy `>=2.3,<3`. Python 3.11 mínimo.
+  - `requirements-dev.lock` fija las versiones y sus dependencias. Sin hashes: pendiente de
+    generar con acceso al índice.
+  - Pruebas: 5 nuevas en `tests/test_dependencias.py`. Procedimiento en `docs/DEPENDENCIAS.md`.
+
+- Etapa 3, fase D (kernel): composición sin acoplamiento. Sin cambio de comportamiento.
+  - Pruebas de caracterización del orden de arranque y de parada (`tests/test_kernel_characterization.py`).
+  - `kernel/composition.py` construye los servicios. `Kernel.start` ya no importa subsistemas.
+  - `ServiceKey[T]`: registro y consulta tipados, con comprobación de clase. Los accesores del
+    kernel no usan `cast`. `register` y `get` por nombre se conservan.
+  - Retirado `kernel.events` (`kernel/event_bus.py`). El registro de arranque y de parada sigue en
+    la auditoría, a través del outbox.
+
+- Etapa 3, fase E (arquitectura): dependencias indebidas corregidas.
+  - `security/permissions.py` pasa a `core/permissions.py`. `SessionError` pasa a
+    `core/exceptions.py`. `PLATFORM_COMPANY`, `SCOPE_DENIED` y `APPROVE_PERMISSION` pasan a
+    `core/contracts.py`. `kernel_matches` pasa a `core/validation.py`.
+  - La terminal ya no importa `security`. `Installer` expone `code_ttl` y `max_code_attempts`.
+  - Cambio de rutas de importación: quien importe estos símbolos desde su módulo anterior debe
+    cambiar la importación.
+  - `tests/test_arquitectura.py`: 16 pruebas AST sobre capas, subsistemas en la composición,
+    ciclos, `cast`, ejecución dinámica en `modules/` y `plugins/`, hashlib y la tabla de
+    `docs/arquitectura.md`.
+
+- Auditoría posterior a la etapa 2 (`docs/AUDITORIA_ETAPA_2.md`):
+  - Corregido: el guardián no comprobaba el ámbito de empresa cuando una operación no indicaba
+    empresa. Ahora una operación sin empresa es de plataforma.
+  - Corregido: el contador de fallos y el bloqueo se deciden dentro de la transacción de escritura.
+    Un acierto ya no salta un bloqueo fijado durante la verificación.
+  - Corregido: aprobar, rechazar y revocar un permiso temporal es una transición condicionada. Una
+    solicitud no puede resolverse dos veces.
+  - Corregido: el límite de sesiones simultáneas se comprueba dentro de la transacción de escritura.
+  - Corregido: la comprobación de entrega del bus se hace dentro de la transacción del consumidor.
+  - Nuevo: un consumidor se ejecuta bajo un autorizador de SQLite. No puede escribir en tablas de la
+    plataforma, ni editar o borrar la auditoría, ni cambiar el esquema.
+  - Pruebas: 279 casos (262 existentes sin cambios y 17 nuevas).
+  - Pendiente: la API interna del núcleo sin token (P-01), la espera entre reintentos del bus y la
+    comprobación de la versión de SQLite antes de revertir migraciones.
+
+- Etapa 2 de la especificación, dentro de la fase 7:
+  - Multiempresa: tabla `companies` con la empresa `plataforma`. Cada cuenta tiene `company_id`,
+    fijado al crearla y protegido por disparadores. El ámbito se comprueba en el guardián, en los
+    permisos temporales, en la auditoría y en la terminal.
+  - Terminal: opciones 18 (crear empresa) y 19 (listar empresas), solo para la plataforma. La
+    auditoría y las solicitudes de permisos se filtran por empresa.
+  - Instalador del primer administrador con código de un solo uso: hash PBKDF2, caducidad de 30
+    minutos, cinco intentos y cierre permanente por disparador.
+  - Bus de eventos: catálogo tipado de 34 eventos, outbox transaccional, consumidores idempotentes,
+    reintentos, cola de fallidos y reenvío al arrancar. La auditoría es un consumidor. Las categorías
+    `operativo` y `seguridad` se guardan por separado.
+  - Migraciones 6 a 8, reversibles. Antes de migrar una base existente se guarda una copia en
+    `storage/migraciones/`. Plan y resultados en `docs/MIGRACION_ETAPA_2.md`.
+  - Corrección de la etapa 2: los cambios de estado, contraseña y roles de cuentas, y las
+    reautenticaciones y caducidades de sesión, se escriben y auditan en una transacción.
+  - 262 casos de prueba automatizados (214 existentes y 48 nuevas), con ruff y mypy en modo estricto
+    sin errores.
+- Cambio incompatible: `SecurityService.bootstrap_administrator` se elimina. El primer administrador
+  se crea con el instalador. `AuditLog.record` solo acepta eventos del catálogo y sus claves
+  declaradas; un nombre desconocido se rechaza.
 - Corrección de seguridad: durante un bloqueo de cuenta, la respuesta ya no revela que la cuenta
   existe. Los intentos bloqueados quedan en la auditoría como `account.login_blocked`.
 - Auditoría de arquitectura en `docs/CLAUDE_ARCHITECTURE_AUDIT.md`, con plan de corrección por etapas.

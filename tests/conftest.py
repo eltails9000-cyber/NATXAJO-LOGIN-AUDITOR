@@ -30,10 +30,18 @@ def kernel(context: RuntimeContext) -> Iterator[Kernel]:
     instance.stop()
 
 
+def install_administrator(
+    kernel: Kernel, username: str = ADMIN_USER, password: str = ADMIN_PASSWORD
+) -> None:
+    """Completa la instalación inicial con un código emitido en la propia prueba."""
+    installer = kernel.security.installer
+    installer.complete(installer.issue_code(), username, password)
+
+
 @pytest.fixture
 def admin(kernel: Kernel) -> tuple[str, str]:
-    """Crea la cuenta de administrador de pruebas y devuelve (usuario, contraseña)."""
-    kernel.security.bootstrap_administrator(ADMIN_USER, ADMIN_PASSWORD)
+    """Instala la plataforma con un administrador de pruebas y devuelve (usuario, contraseña)."""
+    install_administrator(kernel)
     return ADMIN_USER, ADMIN_PASSWORD
 
 
@@ -112,17 +120,38 @@ def make_plugin_source() -> Callable[..., Path]:
 
 
 @pytest.fixture
-def register_publisher() -> Callable[..., None]:
+def platform_token(kernel: Kernel) -> str:
+    """Sesión reautenticada de la cuenta de la plataforma: autoriza operaciones de confianza.
+
+    Instala la plataforma si todavía no tiene cuentas. Es la única vía de las pruebas para dar de
+    alta editores o revocarlos: la misma que usa la aplicación.
+    """
+    if not kernel.security.has_accounts():
+        install_administrator(kernel)
+    token = kernel.security.login(ADMIN_USER, ADMIN_PASSWORD)
+    kernel.security.reauthenticate(token, ADMIN_PASSWORD)
+    return token
+
+
+@pytest.fixture
+def register_publisher(kernel: Kernel, platform_token: str) -> Callable[..., None]:
     """Registra un editor con la clave pública derivada de un secreto de prueba."""
 
     def _register(
-        kernel: Kernel,
+        target: Kernel,
         trust_level: str = "official",
         key_id: str = PLUGIN_KEY_ID,
         secret: bytes = PLUGIN_SECRET,
     ) -> None:
-        kernel.plugins.trust.add_publisher(
-            key_id, f"Editor {key_id}", ed25519.public_key(secret), trust_level
+        if target is not kernel:
+            raise ValueError("el editor se registra en el núcleo de la prueba")
+        target.plugins.register_publisher(
+            platform_token,
+            key_id=key_id,
+            display_name=f"Editor {key_id}",
+            public_key=ed25519.public_key(secret),
+            trust_level=trust_level,
+            confirmed=True,
         )
 
     return _register

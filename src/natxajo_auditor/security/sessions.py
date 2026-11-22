@@ -11,7 +11,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from natxajo_auditor.core.exceptions import AuthorizationError
+from natxajo_auditor.core.exceptions import AuthorizationError, SessionError
 from natxajo_auditor.core.utilities import Clock, from_iso, sha256_bytes, to_iso
 from natxajo_auditor.security.accounts import AccountStore
 from natxajo_auditor.storage.audit import AuditLog
@@ -22,10 +22,6 @@ ABSOLUTE_TIMEOUT = timedelta(hours=8)
 REAUTH_WINDOW = timedelta(minutes=5)
 MAX_CONCURRENT_SESSIONS = 3
 INVALID_SESSION = "sesión no válida"
-
-
-class SessionError(AuthorizationError):
-    """La sesión no existe, está revocada o ha caducado."""
 
 
 @dataclass(frozen=True)
@@ -43,13 +39,15 @@ class SessionStore:
 
     def open(self, username: str) -> str:
         now = self._clock()
-        if len(self._live_rows(username, now)) >= MAX_CONCURRENT_SESSIONS:
-            raise AuthorizationError(
-                f"máximo de {MAX_CONCURRENT_SESSIONS} sesiones simultáneas alcanzado; "
-                "cierre una sesión"
-            )
         token = secrets.token_urlsafe(32)
+        # El recuento y la inserción van en la misma transacción de escritura: dos inicios
+        # simultáneos no pueden superar el límite leyendo el mismo número de sesiones.
         with self._database.transaction() as connection:
+            if len(self._live_rows(username, now)) >= MAX_CONCURRENT_SESSIONS:
+                raise AuthorizationError(
+                    f"máximo de {MAX_CONCURRENT_SESSIONS} sesiones simultáneas alcanzado; "
+                    "cierre una sesión"
+                )
             connection.execute(
                 "INSERT INTO sessions (token_hash, username, created_at, last_activity, "
                 "expires_at) VALUES (?, ?, ?, ?, ?)",
@@ -78,10 +76,15 @@ class SessionStore:
         if revoked is not None:
             raise SessionError(INVALID_SESSION)
         if not _is_live(str(last_text), str(expires_text), now):
-            self._database.execute(
-                "UPDATE sessions SET revoked_at = ? WHERE id = ?", (to_iso(now), session_id)
-            )
-            self._audit.record("session.expired", {"username": username})
+            # La revocación se confirma antes de lanzar el error: dentro de la transacción,
+            # el error la revertiría y la sesión caducada seguiría siendo válida en la base.
+            with self._database.transaction() as connection:
+                connection.execute(
+                    "UPDATE sessions SET revoked_at = ? WHERE id = ?", (to_iso(now), session_id)
+                )
+                self._audit.record(
+                    "session.expired", {"username": str(username)}, connection=connection
+                )
             raise SessionError("la sesión ha caducado; inicie sesión de nuevo")
         self._database.execute(
             "UPDATE sessions SET last_activity = ? WHERE id = ?", (to_iso(now), session_id)
@@ -124,10 +127,13 @@ class SessionStore:
         session = self.validate(token)
         accounts.check_password(session.username, password)
         now = self._clock()
-        self._database.execute(
-            "UPDATE sessions SET reauth_at = ? WHERE id = ?", (to_iso(now), session.session_id)
-        )
-        self._audit.record("session.reauthenticated", {"username": session.username})
+        with self._database.transaction() as connection:
+            connection.execute(
+                "UPDATE sessions SET reauth_at = ? WHERE id = ?", (to_iso(now), session.session_id)
+            )
+            self._audit.record(
+                "session.reauthenticated", {"username": session.username}, connection=connection
+            )
 
     def recently_reauthenticated(self, session: Session) -> bool:
         if session.reauth_at is None:

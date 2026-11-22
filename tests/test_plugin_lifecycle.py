@@ -49,9 +49,10 @@ def test_rejected_package_is_audited_and_not_stored(
     tmp_path: Path,
     make_plugin_source: Callable[..., Path],
     register_publisher: Callable[..., None],
+    platform_token: str,
 ) -> None:
     register_publisher(kernel)
-    kernel.plugins.trust.revoke("editor_pruebas")
+    kernel.plugins.revoke_publisher(platform_token, "editor_pruebas", confirmed=True)
     source = make_plugin_source(tmp_path / "pkg")
     with pytest.raises(ValidationError, match="revocado"):
         kernel.plugins.install_package(source)
@@ -130,15 +131,20 @@ def test_third_party_plugin_needs_an_approved_review(
     tmp_path: Path,
     make_plugin_source: Callable[..., Path],
     register_publisher: Callable[..., None],
+    platform_token: str,
 ) -> None:
     register_publisher(kernel, trust_level="third_party")
     kernel.plugins.install_package(make_plugin_source(tmp_path / "pkg"))
     with pytest.raises(PluginError, match="requiere una revisión aprobada"):
         kernel.plugins.enable("plugin_ejemplo")
-    kernel.plugins.record_review("plugin_ejemplo", "Ana", "rejected", "pendiente")
+    kernel.plugins.record_review(
+        platform_token, "plugin_ejemplo", "rejected", "pendiente", confirmed=True
+    )
     with pytest.raises(PluginError, match="requiere una revisión aprobada"):
         kernel.plugins.enable("plugin_ejemplo")
-    kernel.plugins.record_review("plugin_ejemplo", "Ana", "approved", "correcto")
+    kernel.plugins.record_review(
+        platform_token, "plugin_ejemplo", "approved", "correcto", confirmed=True
+    )
     assert kernel.plugins.enable("plugin_ejemplo") == ["plugin_ejemplo"]
     assert kernel.plugins.get("plugin_ejemplo").approved_review is True
 
@@ -163,6 +169,7 @@ def test_revoking_a_publisher_disables_its_plugins_and_dependents(
     tmp_path: Path,
     make_plugin_source: Callable[..., Path],
     register_publisher: Callable[..., None],
+    platform_token: str,
 ) -> None:
     register_publisher(kernel, key_id="editor_base", secret=BASE_SECRET)
     register_publisher(kernel, key_id="editor_app", secret=APP_SECRET)
@@ -194,7 +201,7 @@ def test_revoking_a_publisher_disables_its_plugins_and_dependents(
     kernel.plugins.enable("plugin_app")
     kernel.plugins.enable("plugin_otro")
 
-    disabled = kernel.plugins.revoke_publisher("editor_base")
+    disabled = kernel.plugins.revoke_publisher(platform_token, "editor_base", confirmed=True)
 
     assert disabled == ["plugin_app", "plugin_base"]
     states = {item.plugin_id: item.enabled for item in kernel.plugins.list_plugins()}
@@ -278,9 +285,11 @@ def test_install_from_repository_checks_the_catalog_entry(
         kernel.plugins.install_from_repository(repository, "plugin_ejemplo", "0.2.0")
 
 
-def test_review_requires_an_installed_plugin(kernel: Kernel) -> None:
+def test_review_requires_an_installed_plugin(kernel: Kernel, platform_token: str) -> None:
     with pytest.raises(PluginError, match="plugin no instalado"):
-        kernel.plugins.record_review("plugin_ejemplo", "Ana", "approved", "")
+        kernel.plugins.record_review(
+            platform_token, "plugin_ejemplo", "approved", "", confirmed=True
+        )
 
 
 def test_state_survives_a_restart(

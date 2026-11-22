@@ -22,9 +22,9 @@ def _applied(database: Database) -> list[int]:
 
 
 def test_migrations_apply_once(database: Database) -> None:
-    assert apply_migrations(database) == [1, 2, 3, 4, 5]
+    assert apply_migrations(database) == [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert apply_migrations(database) == []
-    assert _applied(database) == [1, 2, 3, 4, 5]
+    assert _applied(database) == [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 
 def test_failed_migration_leaves_no_partial_changes(database: Database) -> None:
@@ -60,10 +60,11 @@ def test_migration_versions_must_be_ascending(database: Database) -> None:
 def test_audit_log_records_and_lists(database: Database) -> None:
     apply_migrations(database)
     audit = AuditLog(database)
-    audit.record("prueba", {"b": 2, "a": 1})
+    audit.record("version.activated", {"to": "0.2.0", "from": "0.1.0", "reason": "prueba"})
     events = audit.list_events()
-    assert events[0]["event_type"] == "prueba"
-    assert events[0]["payload"] == {"a": 1, "b": 2}
+    assert events[0]["event_type"] == "version.activated"
+    assert events[0]["payload"] == {"from": "0.1.0", "reason": "prueba", "to": "0.2.0"}
+    assert events[0]["category"] == "operativo"
 
 
 def _backup(tmp_path: Path) -> tuple[BackupManager, Path, Path]:

@@ -1,0 +1,25 @@
+# Bloqueo de las dependencias de desarrollo de NATXAJO-LOGIN-AUDITOR.
+#
+# Versiones probadas: Python 3.13.18 y 3.11.18 en Linux; pytest 9.1.1, ruff 0.16.9, mypy 2.3.1.
+# Este fichero fija versiones; no fija hashes de los artefactos. Ver docs/DEPENDENCIAS.md.
+#
+# Uso (no añade dependencias de ejecución; el proyecto no tiene ninguna):
+#   python -m pip install -c requirements-dev.lock -e ".[dev]"
+#
+# El árbol se calculó desde los metadatos de las herramientas, con los marcadores evaluados para
+# Python 3.11 en Linux y en Windows. Solo se ha ejecutado en Linux. colorama lo requiere pytest y
+# solo se instala en Windows.
+
+ast-serialize==0.11.2
+colorama==0.4.6; sys_platform == "win32"
+iniconfig==2.3.0
+librt==0.15.0
+mypy==2.3.1
+mypy-extensions==1.1.0
+packaging==26.3
+pathspec==1.1.1
+pluggy==1.6.0
+pygments==2.21.0
+pytest==9.1.1
+ruff==0.16.9
+typing-extensions==4.16.0

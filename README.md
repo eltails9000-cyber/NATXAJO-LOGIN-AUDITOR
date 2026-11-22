@@ -19,26 +19,39 @@ python main.py            # menú interactivo
 python main.py --version  # muestra la versión y sale
 ```
 
-En Windows también puede usarse `.\launcher.ps1`, que busca un Python 3.11 o posterior.
+En Windows también puede usarse `.\launcher.ps1`, que busca un Python 3.11 o posterior. Con la
+política de ejecución por defecto de Windows, el script no se ejecuta; use:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher.ps1
+```
+
+El lanzador no se ha ejecutado todavía en Windows. El procedimiento de prueba está en
+`docs/PRUEBAS_WINDOWS.md`.
 
 Los datos de ejecución (`config/`, `storage/`) se crean en la carpeta del proyecto la primera vez y no se versionan.
 
-La primera vez que se abre la terminal, con la base vacía, se crea la cuenta de administrador. Después, cada uso requiere iniciar sesión.
+La primera vez que se abre la terminal, con la base vacía, se muestra un código de instalación de un solo uso y se crea la cuenta de administrador de la plataforma. Después, cada uso requiere iniciar sesión.
 
 ## Pruebas
 
 ```bash
-python -m pip install -e .[dev]
+python -m pip install -c requirements-dev.lock -e ".[dev]"
 python -m pytest
 python -m ruff check .
+python -m ruff format --check .
 python -m mypy
 ```
+
+Versiones probadas, rangos y limitaciones del bloqueo: `docs/DEPENDENCIAS.md`.
 
 ## Documentación
 
 - `docs/diagnostico-inicial.md`: estado del repositorio al reconstruirlo y decisiones de estructura.
-- `docs/arquitectura.md`: capas, ciclo de vida, decisiones (D1 a D8) y ubicación de los datos.
+- `docs/arquitectura.md`: capas, ciclo de vida, decisiones (D1 a D12) y ubicación de los datos.
+- `docs/MIGRACION_ETAPA_2.md`: plan y resultados de la migración a multiempresa, instalador y bus de eventos.
 - `docs/seguridad.md`: límites de uso, controles implementados y lo que no está implementado.
+- `docs/DEPENDENCIAS.md`: rangos de desarrollo, bloqueo, versiones probadas y lo no verificado.
 - `docs/IMPLEMENTATION_STATUS.md`: estado verificado de cada fase.
 - `docs/CLAUDE_ARCHITECTURE_AUDIT.md`: auditoría de arquitectura y plan de corrección por etapas.
 - `CHANGELOG.md`: historial de cambios.
@@ -47,4 +60,6 @@ python -m mypy
 
 Implementado: núcleo con ciclo de vida, configuración validada con historial y copias restaurables con autorización, base SQLite con migraciones, auditoría, manifiestos de versión con carga manual, cambio y reversión, módulos declarativos con dependencias habilitables, plugins firmados (editores, catálogo local, revisión y habilitación con dependencias), cuentas con roles y sesiones, permisos temporales, guardián de operaciones críticas y terminal interactiva.
 
-Pendiente: ejecución de módulos y plugins, gestión de plugins y de permisos desde la terminal, automatización, motor de auditoría, interfaz de escritorio, informes y mantenimiento. Multiempresa no está implementado. No se declaran como disponibles hasta que tengan pruebas.
+Multiempresa: las cuentas pertenecen a una empresa y el ámbito se comprueba en el guardián; faltan aplicaciones y entornos. Instalador con código de un solo uso y bus de eventos con auditoría.
+
+Pendiente: ejecución de módulos y plugins, gestión de plugins y de permisos desde la terminal, automatización, motor de auditoría, interfaz de escritorio, informes y mantenimiento. No se declaran como disponibles hasta que tengan pruebas.
