@@ -329,6 +329,41 @@ MIGRATIONS: tuple[Migration, ...] = (
             "DROP TABLE event_outbox",
         ),
     ),
+    Migration(
+        version=9,
+        name="editores_de_confianza",
+        # Invariantes de los editores en la propia base, con independencia del código que escriba:
+        # la clave no cambia, un editor revocado no vuelve a estar activo y no se borran editores.
+        statements=(
+            """
+            CREATE TRIGGER plugin_publishers_key_is_immutable
+            BEFORE UPDATE OF key_id, public_key ON plugin_publishers
+            BEGIN
+                SELECT RAISE(ABORT, 'la clave de un editor es inmutable');
+            END
+            """,
+            """
+            CREATE TRIGGER plugin_publishers_revocation_is_final
+            BEFORE UPDATE OF trust_level ON plugin_publishers
+            WHEN OLD.trust_level = 'revoked' AND NEW.trust_level <> 'revoked'
+            BEGIN
+                SELECT RAISE(ABORT, 'un editor revocado no puede volver a estar activo');
+            END
+            """,
+            """
+            CREATE TRIGGER plugin_publishers_cannot_be_deleted
+            BEFORE DELETE ON plugin_publishers
+            BEGIN
+                SELECT RAISE(ABORT, 'los editores no se eliminan: se revocan');
+            END
+            """,
+        ),
+        down=(
+            "DROP TRIGGER plugin_publishers_cannot_be_deleted",
+            "DROP TRIGGER plugin_publishers_revocation_is_final",
+            "DROP TRIGGER plugin_publishers_key_is_immutable",
+        ),
+    ),
 )
 
 _BOOKKEEPING = (

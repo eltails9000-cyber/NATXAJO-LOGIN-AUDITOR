@@ -23,6 +23,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from natxajo_auditor.core.contracts import OperationGate
 from natxajo_auditor.core.exceptions import PluginError, ValidationError
 from natxajo_auditor.core.graph import dependents_of, resolve_load_order
 from natxajo_auditor.plugins.package import copy_package
@@ -41,6 +42,10 @@ DISABLED_EVENT = "plugin.disabled"
 UNINSTALLED_EVENT = "plugin.uninstalled"
 REVIEWED_EVENT = "plugin.reviewed"
 REVOKED_EVENT = "plugin.publisher_revoked"
+PUBLISHER_REGISTERED_EVENT = "plugin.publisher_registered"
+# Confianza global: solo la cuenta de la plataforma, con confirmación y reautenticación.
+PUBLISHER_PERMISSION = "plugins:nucleo:editor:administrar"
+REVIEW_PERMISSION = "plugins:nucleo:revision:administrar"
 
 
 @dataclass(frozen=True)
@@ -62,12 +67,16 @@ class PluginManager:
         database: Database,
         audit: AuditLog,
         kernel_version: str,
+        gate: OperationGate,
     ) -> None:
         self._database = database
         self._audit = audit
         self._kernel_version = kernel_version
+        self._gate = gate
         self._store = PluginStore(plugins_dir / "store")
         self._work_dir = plugins_dir / "work"
+        # Lectura pública. Las altas y revocaciones solo se hacen con register_publisher y
+        # revoke_publisher, que pasan por la puerta de operaciones.
         self.trust = TrustStore(database)
         self.reviews = ReviewLog(database)
 
@@ -220,58 +229,90 @@ class PluginManager:
             )
         self._store.remove(plugin_id, record.version)
 
-    def record_review(self, plugin_id: str, reviewer: str, decision: str, findings: str) -> None:
-        record = self.get(plugin_id)
-        self.reviews.record(plugin_id, record.version, reviewer, decision, findings)
-        self._audit.record(
-            REVIEWED_EVENT,
-            {
-                "plugin": plugin_id,
-                "version": record.version,
-                "reviewer": reviewer,
-                "decision": decision,
-            },
-        )
+    # Confianza: cada operación pasa por la puerta (sesión, permiso, ámbito de plataforma,
+    # confirmación y reautenticación) y su escritura y auditoría van en una sola transacción.
 
-    def revoke_publisher(self, key_id: str) -> list[str]:
-        """Revoca un editor y deshabilita sus plugins habilitados y los que dependen de ellos."""
-        self.trust.get_publisher(key_id)
-        records = {record.plugin_id: record for record in self.list_plugins()}
-        affected = {
-            item
-            for item, record in records.items()
-            if record.enabled and record.publisher_key_id == key_id
-        }
-        grew = True
-        while grew:
-            grew = False
-            for item, record in records.items():
-                if (
-                    record.enabled
-                    and item not in affected
-                    and any(dependency in affected for dependency in record.dependencies)
-                ):
-                    affected.add(item)
-                    grew = True
-        with self._database.transaction() as connection:
-            self.trust.revoke(key_id)
-            for item in sorted(affected):
-                connection.execute(
-                    "UPDATE plugin_installs SET enabled = 0, updated_at = CURRENT_TIMESTAMP "
-                    "WHERE plugin_id = ?",
-                    (item,),
-                )
+    def register_publisher(
+        self,
+        token: str,
+        *,
+        key_id: str,
+        display_name: str,
+        public_key: bytes,
+        trust_level: str,
+        confirmed: bool = False,
+    ) -> None:
+        """Da de alta un editor de confianza. Solo la cuenta de la plataforma, con permiso."""
+        username = self._gate.username_for(token)
+
+        def operation() -> None:
+            with self._database.transaction() as connection:
+                self.trust._insert(connection, key_id, display_name, public_key, trust_level)
                 self._audit.record(
-                    DISABLED_EVENT,
-                    {"plugin": item, "reason": f"editor revocado: {key_id}"},
+                    PUBLISHER_REGISTERED_EVENT,
+                    {"publisher": key_id, "trust_level": trust_level, "username": username},
                     connection=connection,
                 )
-            self._audit.record(
-                REVOKED_EVENT,
-                {"publisher": key_id, "disabled": sorted(affected)},
-                connection=connection,
-            )
-        return sorted(affected)
+
+        self._gate.run(token, PUBLISHER_PERMISSION, operation, confirmed=confirmed)
+
+    def revoke_publisher(self, token: str, key_id: str, *, confirmed: bool = False) -> list[str]:
+        """Revoca un editor y deshabilita sus plugins habilitados y los que dependen de ellos."""
+        username = self._gate.username_for(token)
+
+        def operation() -> list[str]:
+            with self._database.transaction() as connection:
+                records = {record.plugin_id: record for record in self.list_plugins()}
+                affected = _disabled_by_revocation(records, key_id)
+                self.trust._revoke(connection, key_id)
+                for item in affected:
+                    connection.execute(
+                        "UPDATE plugin_installs SET enabled = 0, updated_at = CURRENT_TIMESTAMP "
+                        "WHERE plugin_id = ?",
+                        (item,),
+                    )
+                    self._audit.record(
+                        DISABLED_EVENT,
+                        {"plugin": item, "reason": f"editor revocado: {key_id}"},
+                        connection=connection,
+                    )
+                self._audit.record(
+                    REVOKED_EVENT,
+                    {"publisher": key_id, "disabled": affected, "username": username},
+                    connection=connection,
+                )
+                return affected
+
+        return self._gate.run(token, PUBLISHER_PERMISSION, operation, confirmed=confirmed)
+
+    def record_review(
+        self,
+        token: str,
+        plugin_id: str,
+        decision: str,
+        findings: str,
+        *,
+        confirmed: bool = False,
+    ) -> None:
+        """Registra una decisión de revisión. El revisor es la cuenta de la sesión."""
+        username = self._gate.username_for(token)
+
+        def operation() -> None:
+            with self._database.transaction() as connection:
+                record = self.get(plugin_id)
+                self.reviews.record(plugin_id, record.version, username, decision, findings)
+                self._audit.record(
+                    REVIEWED_EVENT,
+                    {
+                        "plugin": plugin_id,
+                        "version": record.version,
+                        "reviewer": username,
+                        "decision": decision,
+                    },
+                    connection=connection,
+                )
+
+        self._gate.run(token, REVIEW_PERMISSION, operation, confirmed=confirmed)
 
     # Internos
 
@@ -355,3 +396,24 @@ class PluginManager:
             yield work
         finally:
             shutil.rmtree(work, ignore_errors=True)
+
+
+def _disabled_by_revocation(records: dict[str, PluginRecord], key_id: str) -> list[str]:
+    """Plugins habilitados de un editor y, en cascada, los habilitados que dependen de ellos."""
+    affected = {
+        item
+        for item, record in records.items()
+        if record.enabled and record.publisher_key_id == key_id
+    }
+    grew = True
+    while grew:
+        grew = False
+        for item, record in records.items():
+            if (
+                record.enabled
+                and item not in affected
+                and any(dependency in affected for dependency in record.dependencies)
+            ):
+                affected.add(item)
+                grew = True
+    return sorted(affected)

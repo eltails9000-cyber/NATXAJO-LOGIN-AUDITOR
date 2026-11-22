@@ -34,6 +34,9 @@ CRITICAL_PERMISSIONS: frozenset[str] = frozenset(
         "seguridad:nucleo:empresa:administrar",
         "seguridad:nucleo:permiso:aprobar",
         "almacenamiento:nucleo:copia:restaurar",
+        # Confianza global: editores de confianza y decisiones de revisión de terceros.
+        "plugins:nucleo:editor:administrar",
+        "plugins:nucleo:revision:administrar",
     }
 )
 
@@ -66,6 +69,10 @@ class OperationGuard:
         """Actor de una sesión válida. La empresa sale de la cuenta."""
         session = self._sessions.validate(token)
         return self._actor(session.username, session.session_id)
+
+    def username_for(self, token: str) -> str:
+        """Cuenta de una sesión válida. Sin sesión válida no hay actor y la operación no empieza."""
+        return self._sessions.validate(token).username
 
     def check_scope(self, token: str, company_id: str, permission: str) -> Actor:
         """Comprueba que la sesión puede actuar sobre la empresa indicada. Audita la denegación."""

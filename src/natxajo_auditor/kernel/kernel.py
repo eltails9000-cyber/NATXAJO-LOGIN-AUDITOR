@@ -111,6 +111,13 @@ class Kernel:
                     module_enabled=modules.is_enabled,
                 ),
             )
+            security = SecurityService(
+                database=database,
+                audit=audit,
+                clock=self._clock,
+                password_iterations=self._password_iterations,
+            )
+            self.services.register(SERVICE_SECURITY, security)
             self.services.register(
                 SERVICE_PLUGINS,
                 PluginManager(
@@ -118,15 +125,7 @@ class Kernel:
                     database=database,
                     audit=audit,
                     kernel_version=self.kernel_version,
-                ),
-            )
-            self.services.register(
-                SERVICE_SECURITY,
-                SecurityService(
-                    database=database,
-                    audit=audit,
-                    clock=self._clock,
-                    password_iterations=self._password_iterations,
+                    gate=security.guard,
                 ),
             )
             audit.record("kernel.started", {"version": self.kernel_version})

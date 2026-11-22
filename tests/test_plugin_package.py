@@ -188,9 +188,10 @@ def test_revoked_publisher_is_rejected(
     tmp_path: Path,
     make_plugin_source: Callable[..., Path],
     register_publisher: Callable[..., None],
+    platform_token: str,
 ) -> None:
     register_publisher(kernel)
-    kernel.plugins.trust.revoke("editor_pruebas")
+    kernel.plugins.revoke_publisher(platform_token, "editor_pruebas", confirmed=True)
     root = make_plugin_source(tmp_path / "pkg")
     with pytest.raises(ValidationError, match="revocado"):
         verify_package(root, kernel.plugins.trust, kernel.kernel_version)
@@ -262,28 +263,39 @@ def test_copied_package_keeps_its_integrity(
     )
 
 
-def test_trust_store_registers_and_revokes(kernel: Kernel) -> None:
+def _publish(kernel: Kernel, token: str, key_id: str, public: bytes, trust_level: str) -> None:
+    kernel.plugins.register_publisher(
+        token,
+        key_id=key_id,
+        display_name="Editor",
+        public_key=public,
+        trust_level=trust_level,
+        confirmed=True,
+    )
+
+
+def test_trust_store_registers_and_revokes(kernel: Kernel, platform_token: str) -> None:
     public = ed25519.public_key(bytes(range(1, 33)))
-    kernel.plugins.trust.add_publisher("editor_uno", "Editor uno", public, "verified")
+    _publish(kernel, platform_token, "editor_uno", public, "verified")
     publisher = kernel.plugins.trust.get_publisher("editor_uno")
     assert publisher.public_key == public
     assert publisher.trust_level == "verified"
-    kernel.plugins.trust.revoke("editor_uno")
+    kernel.plugins.revoke_publisher(platform_token, "editor_uno", confirmed=True)
     assert kernel.plugins.trust.get_publisher("editor_uno").trust_level == "revoked"
     assert [item.key_id for item in kernel.plugins.trust.publishers()] == ["editor_uno"]
 
 
-def test_trust_store_rejects_bad_input(kernel: Kernel) -> None:
+def test_trust_store_rejects_bad_input(kernel: Kernel, platform_token: str) -> None:
     public = ed25519.public_key(bytes(range(1, 33)))
     with pytest.raises(ValidationError):
-        kernel.plugins.trust.add_publisher("Mal Id!", "Editor", public, "verified")
+        _publish(kernel, platform_token, "Mal Id!", public, "verified")
     with pytest.raises(ValidationError, match="32 bytes"):
-        kernel.plugins.trust.add_publisher("editor_dos", "Editor", b"corta", "verified")
+        _publish(kernel, platform_token, "editor_dos", b"corta", "verified")
     with pytest.raises(ValidationError, match="nivel de confianza"):
-        kernel.plugins.trust.add_publisher("editor_tres", "Editor", public, "oro")
-    kernel.plugins.trust.add_publisher("editor_cuatro", "Editor", public, "verified")
+        _publish(kernel, platform_token, "editor_tres", public, "oro")
+    _publish(kernel, platform_token, "editor_cuatro", public, "verified")
     with pytest.raises(PluginError, match="ya está registrado"):
-        kernel.plugins.trust.add_publisher("editor_cuatro", "Editor", public, "verified")
+        _publish(kernel, platform_token, "editor_cuatro", public, "verified")
     with pytest.raises(PluginError, match="no registrado"):
         kernel.plugins.trust.get_publisher("nadie")
 
