@@ -10,7 +10,7 @@ from typing import Any
 
 from natxajo_auditor.core.exceptions import ValidationError
 from natxajo_auditor.core.validation import (
-    SEMVER,
+    kernel_matches,
     require_kernel_pattern,
     require_semver,
     require_string_list,
@@ -63,12 +63,3 @@ def load_manifest(path: Path) -> VersionManifest:
     if not isinstance(data, dict):
         raise ValidationError(f"{path}: el manifiesto debe ser un objeto JSON")
     return VersionManifest.from_mapping(data, source=str(path))
-
-
-def kernel_matches(pattern: str, kernel_version: str) -> bool:
-    """Compara una versión de núcleo con un patrón exacto (0.1.0) o de parche (0.1.x)."""
-    if not SEMVER.match(kernel_version):
-        raise ValidationError(f"Versión de núcleo no válida: {kernel_version}")
-    if pattern.endswith(".x"):
-        return pattern.split(".")[:2] == kernel_version.split(".")[:2]
-    return pattern == kernel_version

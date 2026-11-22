@@ -6,14 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from natxajo_auditor.core.exceptions import AuthorizationError, ValidationError
+from natxajo_auditor.core.exceptions import AuthorizationError, SessionError, ValidationError
+from natxajo_auditor.core.permissions import parse_permission
 from natxajo_auditor.interfaces.terminal.app import run_terminal
 from natxajo_auditor.kernel.context import RuntimeContext
 from natxajo_auditor.kernel.kernel import SERVICE_DATABASE, SERVICE_SECURITY, Kernel
 from natxajo_auditor.security.accounts import ACTIVE
 from natxajo_auditor.security.passwords import hash_password, validate_policy, verify_password
-from natxajo_auditor.security.permissions import parse_permission
-from natxajo_auditor.security.sessions import SessionError
 from natxajo_auditor.storage.database import Database
 from tests.conftest import ADMIN_PASSWORD, ADMIN_USER, install_administrator
 

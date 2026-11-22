@@ -15,16 +15,16 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from natxajo_auditor.core.contracts import APPROVE_PERMISSION, SCOPE_DENIED
 from natxajo_auditor.core.exceptions import AuthorizationError, ValidationError
+from natxajo_auditor.core.permissions import Permission, parse_permission
 from natxajo_auditor.core.utilities import Clock, from_iso, to_iso
 from natxajo_auditor.core.validation import require_text
-from natxajo_auditor.security.permissions import Permission, parse_permission
-from natxajo_auditor.security.tenancy import SCOPE_DENIED, company_allows
+from natxajo_auditor.security.tenancy import company_allows
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.database import Database
 
 MAX_GRANT_MINUTES = 240
-APPROVE_PERMISSION = "seguridad:nucleo:permiso:aprobar"
 REVOKE_PERMISSION = "seguridad:nucleo:permiso:revocar"
 PENDING = "pending"
 ACTIVE = "active"

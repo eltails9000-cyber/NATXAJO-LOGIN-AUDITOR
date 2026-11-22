@@ -8,11 +8,11 @@ from typing import cast
 
 import pytest
 
+from natxajo_auditor.core.contracts import PLATFORM_COMPANY, SCOPE_DENIED
 from natxajo_auditor.core.exceptions import AuthorizationError, ValidationError
 from natxajo_auditor.interfaces.terminal.app import run_terminal
 from natxajo_auditor.kernel.kernel import SERVICE_DATABASE, Kernel
 from natxajo_auditor.security.guard import CRITICAL_PERMISSIONS
-from natxajo_auditor.security.tenancy import PLATFORM_COMPANY, SCOPE_DENIED
 from natxajo_auditor.storage.database import Database
 from tests.conftest import ADMIN_PASSWORD, ADMIN_USER, install_administrator
 

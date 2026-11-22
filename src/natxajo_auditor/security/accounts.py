@@ -16,11 +16,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from natxajo_auditor.core.contracts import PLATFORM_COMPANY
 from natxajo_auditor.core.exceptions import AuthorizationError, ValidationError
 from natxajo_auditor.core.utilities import Clock, from_iso, to_iso
 from natxajo_auditor.security.passwords import hash_password, validate_policy, verify_password
 from natxajo_auditor.security.roles import ADMINISTRATOR, check_separation
-from natxajo_auditor.security.tenancy import PLATFORM_COMPANY
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.database import Database
 

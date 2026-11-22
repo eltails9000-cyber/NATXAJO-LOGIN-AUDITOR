@@ -13,9 +13,11 @@ from typing import cast
 import pytest
 
 from natxajo_auditor.core import ed25519
+from natxajo_auditor.core.contracts import SCOPE_DENIED
 from natxajo_auditor.core.exceptions import (
     AuthorizationError,
     PluginError,
+    SessionError,
     StorageError,
     ValidationError,
 )
@@ -23,8 +25,6 @@ from natxajo_auditor.kernel.kernel import SERVICE_DATABASE, Kernel
 from natxajo_auditor.plugins.manager import PluginManager
 from natxajo_auditor.plugins.trust import TrustStore
 from natxajo_auditor.security.guard import CRITICAL_PERMISSIONS
-from natxajo_auditor.security.sessions import SessionError
-from natxajo_auditor.security.tenancy import SCOPE_DENIED
 from natxajo_auditor.storage.database import Database
 from tests.conftest import ADMIN_PASSWORD, ADMIN_USER
 

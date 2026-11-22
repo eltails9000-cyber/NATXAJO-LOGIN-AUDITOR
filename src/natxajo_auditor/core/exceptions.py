@@ -31,6 +31,10 @@ class AuthorizationError(NatxajoError):
     """Operación sensible sin autorización explícita."""
 
 
+class SessionError(AuthorizationError):
+    """La sesión no existe, está revocada o ha caducado."""
+
+
 class VersionError(NatxajoError):
     """Versión no disponible, incompatible o no cargable."""
 

@@ -19,12 +19,12 @@ import secrets
 import sqlite3
 from datetime import timedelta
 
+from natxajo_auditor.core.contracts import PLATFORM_COMPANY
 from natxajo_auditor.core.exceptions import AuthorizationError, ValidationError
 from natxajo_auditor.core.utilities import Clock, from_iso, to_iso
 from natxajo_auditor.security.accounts import PENDING_INSTALLATION, Account, AccountStore
 from natxajo_auditor.security.passwords import hash_password, verify_password
 from natxajo_auditor.security.roles import ADMINISTRATOR
-from natxajo_auditor.security.tenancy import PLATFORM_COMPANY
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.database import Database
 
@@ -48,6 +48,16 @@ class Installer:
         self._clock = clock
         self._iterations = iterations
         self._accounts = accounts
+
+    @property
+    def code_ttl(self) -> timedelta:
+        """Tiempo de validez de un código de instalación."""
+        return CODE_TTL
+
+    @property
+    def max_code_attempts(self) -> int:
+        """Intentos fallidos permitidos antes de invalidar el código."""
+        return MAX_CODE_ATTEMPTS
 
     def is_pending(self) -> bool:
         return self._accounts.installation_pending()

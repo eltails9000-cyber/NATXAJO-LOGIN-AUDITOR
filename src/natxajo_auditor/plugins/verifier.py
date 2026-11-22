@@ -15,7 +15,7 @@ from pathlib import Path
 from natxajo_auditor.core import ed25519
 from natxajo_auditor.core.exceptions import ValidationError
 from natxajo_auditor.core.utilities import sha256_bytes
-from natxajo_auditor.core.validation import require_text
+from natxajo_auditor.core.validation import kernel_matches, require_text
 from natxajo_auditor.plugins.api import check_api_version
 from natxajo_auditor.plugins.manifest import PLUGIN_FILE, PluginManifest, load_plugin_manifest
 from natxajo_auditor.plugins.package import (
@@ -25,7 +25,6 @@ from natxajo_auditor.plugins.package import (
     verify_files,
 )
 from natxajo_auditor.plugins.trust import REVOKED, TrustStore
-from natxajo_auditor.versioning.manifest import kernel_matches
 
 
 @dataclass(frozen=True)

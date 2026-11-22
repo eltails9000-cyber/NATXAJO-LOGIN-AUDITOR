@@ -11,7 +11,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from natxajo_auditor.core.exceptions import AuthorizationError
+from natxajo_auditor.core.exceptions import AuthorizationError, SessionError
 from natxajo_auditor.core.utilities import Clock, from_iso, sha256_bytes, to_iso
 from natxajo_auditor.security.accounts import AccountStore
 from natxajo_auditor.storage.audit import AuditLog
@@ -22,10 +22,6 @@ ABSOLUTE_TIMEOUT = timedelta(hours=8)
 REAUTH_WINDOW = timedelta(minutes=5)
 MAX_CONCURRENT_SESSIONS = 3
 INVALID_SESSION = "sesión no válida"
-
-
-class SessionError(AuthorizationError):
-    """La sesión no existe, está revocada o ha caducado."""
 
 
 @dataclass(frozen=True)

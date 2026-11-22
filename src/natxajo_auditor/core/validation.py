@@ -50,3 +50,12 @@ def require_string_list(value: object, field: str, source: str) -> tuple[str, ..
     if len(set(value)) != len(value):
         raise ValidationError(f"{source}: {field} tiene elementos repetidos")
     return tuple(value)
+
+
+def kernel_matches(pattern: str, kernel_version: str) -> bool:
+    """Compara una versión de núcleo con un patrón exacto (0.1.0) o de parche (0.1.x)."""
+    if not SEMVER.match(kernel_version):
+        raise ValidationError(f"Versión de núcleo no válida: {kernel_version}")
+    if pattern.endswith(".x"):
+        return pattern.split(".")[:2] == kernel_version.split(".")[:2]
+    return pattern == kernel_version

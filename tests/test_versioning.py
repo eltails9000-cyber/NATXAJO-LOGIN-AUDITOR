@@ -5,12 +5,13 @@ from typing import Any
 import pytest
 
 from natxajo_auditor.core.exceptions import ValidationError, VersionError
+from natxajo_auditor.core.validation import kernel_matches
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.database import Database
 from natxajo_auditor.storage.migrations import apply_migrations
 from natxajo_auditor.versioning.channels import Channel
 from natxajo_auditor.versioning.manager import ACTIVE_KEY, VersionManager
-from natxajo_auditor.versioning.manifest import VersionManifest, kernel_matches
+from natxajo_auditor.versioning.manifest import VersionManifest
 from natxajo_auditor.versioning.registry import VersionRegistry
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

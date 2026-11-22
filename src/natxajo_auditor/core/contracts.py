@@ -2,12 +2,19 @@
 
 Los subsistemas de módulos y plugins dependen de estos tipos y no de las implementaciones de
 security/. Así no importan la seguridad concreta y pueden probarse con un guardián sustituto.
+
+Las constantes de este módulo son valores que varios subsistemas comparten. Se definen aquí
+una sola vez y cada subsistema las importa.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Protocol, TypeVar
+
+PLATFORM_COMPANY = "plataforma"
+SCOPE_DENIED = "la operación pertenece a otra empresa"
+APPROVE_PERMISSION = "seguridad:nucleo:permiso:aprobar"
 
 T = TypeVar("T")
 

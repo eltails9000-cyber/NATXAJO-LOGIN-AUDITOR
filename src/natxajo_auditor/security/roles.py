@@ -15,8 +15,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from natxajo_auditor.core.exceptions import AuthorizationError, ValidationError
+from natxajo_auditor.core.permissions import Permission, covers, parse_permission
 from natxajo_auditor.core.validation import require_identifier
-from natxajo_auditor.security.permissions import Permission, covers, parse_permission
 from natxajo_auditor.storage.database import Database
 
 MAX_INHERITANCE_DEPTH = 5

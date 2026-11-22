@@ -17,11 +17,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TypeVar
 
+from natxajo_auditor.core.contracts import SCOPE_DENIED
 from natxajo_auditor.core.exceptions import AuthorizationError
 from natxajo_auditor.security.accounts import AccountStore
 from natxajo_auditor.security.authorization import Authorizer
 from natxajo_auditor.security.sessions import SessionStore
-from natxajo_auditor.security.tenancy import SCOPE_DENIED, Actor, may_act_on
+from natxajo_auditor.security.tenancy import Actor, may_act_on
 from natxajo_auditor.storage.audit import AuditLog
 
 T = TypeVar("T")

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from natxajo_auditor.core.contracts import PLATFORM_COMPANY
 from natxajo_auditor.core.utilities import Clock
 from natxajo_auditor.security.accounts import DISABLED, Account, AccountStore
 from natxajo_auditor.security.authorization import Authorizer
@@ -21,7 +22,6 @@ from natxajo_auditor.security.guard import OperationGuard
 from natxajo_auditor.security.installer import Installer
 from natxajo_auditor.security.roles import RoleStore
 from natxajo_auditor.security.sessions import SessionStore
-from natxajo_auditor.security.tenancy import PLATFORM_COMPANY
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.database import Database
 

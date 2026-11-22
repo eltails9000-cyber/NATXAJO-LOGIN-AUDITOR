@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from natxajo_auditor.core.contracts import PLATFORM_COMPANY
 from natxajo_auditor.core.events import COMPANY_ID
 from natxajo_auditor.core.exceptions import ValidationError
 from natxajo_auditor.core.validation import require_text
-from natxajo_auditor.security.tenancy import PLATFORM_COMPANY
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.database import Database
 

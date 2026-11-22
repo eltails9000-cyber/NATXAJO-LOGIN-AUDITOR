@@ -17,12 +17,14 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from natxajo_auditor.core.exceptions import AuthorizationError, NatxajoError, ValidationError
+from natxajo_auditor.core.contracts import APPROVE_PERMISSION, PLATFORM_COMPANY, SCOPE_DENIED
+from natxajo_auditor.core.exceptions import (
+    AuthorizationError,
+    NatxajoError,
+    SessionError,
+    ValidationError,
+)
 from natxajo_auditor.kernel.kernel import Kernel
-from natxajo_auditor.security.grants import APPROVE_PERMISSION
-from natxajo_auditor.security.installer import CODE_TTL, MAX_CODE_ATTEMPTS
-from natxajo_auditor.security.sessions import SessionError
-from natxajo_auditor.security.tenancy import PLATFORM_COMPANY, SCOPE_DENIED
 
 PENDING_FEATURES = (
     "Gestión de plugins desde la terminal (fase 6)",
@@ -95,12 +97,12 @@ def _install(console: Console) -> bool:
     """Instalación del primer administrador. El código se muestra una vez y solo sirve una vez."""
     installer = console.kernel.security.installer
     code = installer.issue_code()
-    minutes = int(CODE_TTL.total_seconds() // 60)
+    minutes = int(installer.code_ttl.total_seconds() // 60)
     console.write("No hay cuentas en la plataforma. Instalación del primer administrador.")
     console.write(f"Código de instalación de un solo uso (válido {minutes} minutos):")
     console.write(f"  código: {code}")
     console.write("Guárdelo ahora: no volverá a mostrarse.")
-    for _ in range(MAX_CODE_ATTEMPTS):
+    for _ in range(installer.max_code_attempts):
         typed = console.read_secret("Código de instalación: ").strip()
         username = console.read("Usuario administrador: ").strip()
         password = console.read_secret("Contraseña: ")

@@ -7,9 +7,9 @@ temporales activos. Una cuenta deshabilitada no tiene ninguno.
 from __future__ import annotations
 
 from natxajo_auditor.core.exceptions import AuthorizationError
+from natxajo_auditor.core.permissions import Permission, covers, parse_permission
 from natxajo_auditor.security.accounts import ACTIVE
 from natxajo_auditor.security.grants import GrantStore
-from natxajo_auditor.security.permissions import Permission, covers, parse_permission
 from natxajo_auditor.security.roles import RoleStore
 from natxajo_auditor.storage.database import Database
 

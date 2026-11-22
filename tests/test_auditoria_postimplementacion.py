@@ -13,6 +13,7 @@ from typing import Any, cast
 import pytest
 
 import natxajo_auditor.security.accounts as accounts_module
+from natxajo_auditor.core.contracts import SCOPE_DENIED
 from natxajo_auditor.core.events import Event
 from natxajo_auditor.core.exceptions import AuthorizationError, ValidationError
 from natxajo_auditor.core.utilities import utc_now
@@ -20,7 +21,6 @@ from natxajo_auditor.kernel.kernel import SERVICE_DATABASE, Kernel
 from natxajo_auditor.security.accounts import MAX_FAILED_ATTEMPTS, AccountStore
 from natxajo_auditor.security.installer import Installer
 from natxajo_auditor.security.sessions import MAX_CONCURRENT_SESSIONS
-from natxajo_auditor.security.tenancy import SCOPE_DENIED
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.database import Database
 from natxajo_auditor.storage.migrations import apply_migrations

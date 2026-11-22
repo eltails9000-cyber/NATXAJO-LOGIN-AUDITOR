@@ -12,8 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-PLATFORM_COMPANY = "plataforma"
-SCOPE_DENIED = "la operación pertenece a otra empresa"
+from natxajo_auditor.core.contracts import PLATFORM_COMPANY
 
 
 @dataclass(frozen=True)
