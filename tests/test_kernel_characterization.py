@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from natxajo_auditor.kernel import kernel as kernel_module
+from natxajo_auditor.kernel import composition as composition_module
 from natxajo_auditor.kernel.context import RuntimeContext
 from natxajo_auditor.kernel.kernel import Kernel
 from natxajo_auditor.kernel.lifecycle import LifecycleState
@@ -69,7 +69,7 @@ def trace(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         steps.append("close")
         original_close(self)
 
-    original_migrate = kernel_module.apply_migrations
+    original_migrate = composition_module.apply_migrations
 
     def migrate(database: Database) -> list[int]:
         steps.append("migrate")
@@ -80,7 +80,7 @@ def trace(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     monkeypatch.setattr(EventOutbox, "dispatch_pending", dispatch_pending)
     monkeypatch.setattr(Database, "snapshot", snapshot)
     monkeypatch.setattr(Database, "close", close)
-    monkeypatch.setattr(kernel_module, "apply_migrations", migrate)
+    monkeypatch.setattr(composition_module, "apply_migrations", migrate)
     return steps
 
 
@@ -115,7 +115,7 @@ def test_an_existing_database_with_pending_migrations_is_copied_before_migrating
     first.start()
     first.stop()
     trace.clear()
-    monkeypatch.setattr(kernel_module, "pending_versions", lambda database: [9])
+    monkeypatch.setattr(composition_module, "pending_versions", lambda database: [9])
 
     second = _kernel(context)
     second.start()
@@ -145,7 +145,7 @@ def test_a_failed_start_closes_the_database_and_builds_nothing_after_the_failure
     def broken_security(**_: object) -> None:
         raise RuntimeError("fallo simulado al construir la seguridad")
 
-    monkeypatch.setattr(kernel_module, "SecurityService", broken_security)
+    monkeypatch.setattr(composition_module, "SecurityService", broken_security)
     kernel = _kernel(context)
 
     with pytest.raises(RuntimeError, match="fallo simulado"):

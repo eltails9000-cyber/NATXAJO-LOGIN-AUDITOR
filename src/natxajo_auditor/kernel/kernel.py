@@ -1,46 +1,73 @@
-"""Núcleo permanente: arranque, parada y acceso a servicios.
+"""Núcleo permanente: arranque, parada y acceso tipado a servicios.
 
 El núcleo no depende de una versión concreta de la plataforma. Las versiones son un
 servicio más, que se consulta y se carga a petición.
 
+El núcleo no importa subsistemas concretos en tiempo de ejecución. Los construye
+`kernel.composition.compose`, y sus accesores leen los servicios con claves tipadas. Las clases
+concretas solo se nombran en las anotaciones, bajo TYPE_CHECKING.
+
 Al arrancar, si la base de datos ya existía y tiene migraciones pendientes, se guarda una copia
-consistente en storage/migraciones/ antes de migrar. Después se entregan los eventos pendientes del
-bus, antes de atender cualquier otra operación. El arranque y la parada quedan en la auditoría.
+consistente antes de migrar. Después se entregan los eventos pendientes del outbox, antes de
+atender cualquier otra operación. El arranque y la parada quedan en la auditoría.
 """
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any
 
 from natxajo_auditor import __version__
-from natxajo_auditor.configuration.manager import ConfigurationManager
-from natxajo_auditor.core.utilities import Clock, utc_now, utc_stamp
+from natxajo_auditor.core.utilities import Clock, utc_now
+from natxajo_auditor.kernel.composition import (
+    AUDIT,
+    BACKUPS,
+    CONFIGURATION,
+    DATABASE,
+    DEFAULT_PASSWORD_ITERATIONS,
+    MIN_PASSWORD_ITERATIONS,
+    MODULES,
+    OUTBOX,
+    PLUGINS,
+    SECURITY,
+    SERVICE_AUDIT,
+    SERVICE_BACKUPS,
+    SERVICE_CONFIGURATION,
+    SERVICE_DATABASE,
+    SERVICE_MODULES,
+    SERVICE_OUTBOX,
+    SERVICE_PLUGINS,
+    SERVICE_SECURITY,
+    SERVICE_VERSIONS,
+    VERSIONS,
+    compose,
+)
 from natxajo_auditor.kernel.context import RuntimeContext
 from natxajo_auditor.kernel.event_bus import EventBus
 from natxajo_auditor.kernel.lifecycle import Lifecycle, LifecycleState
 from natxajo_auditor.kernel.service_container import ServiceContainer
-from natxajo_auditor.modules.manager import ModuleManager
-from natxajo_auditor.plugins.manager import PluginManager
-from natxajo_auditor.security.passwords import DEFAULT_ITERATIONS, MIN_ITERATIONS
-from natxajo_auditor.security.service import SecurityService
-from natxajo_auditor.storage.audit import AuditConsumer, AuditLog
-from natxajo_auditor.storage.backups import BackupManager
-from natxajo_auditor.storage.database import Database
-from natxajo_auditor.storage.migrations import apply_migrations, pending_versions
-from natxajo_auditor.storage.outbox import EventOutbox
-from natxajo_auditor.versioning.manager import VersionManager
-from natxajo_auditor.versioning.registry import VersionRegistry
 
-SERVICE_CONFIGURATION = "configuration"
-SERVICE_DATABASE = "database"
-SERVICE_OUTBOX = "outbox"
-SERVICE_AUDIT = "audit"
-SERVICE_BACKUPS = "backups"
-SERVICE_MODULES = "modules"
-SERVICE_VERSIONS = "versions"
-SERVICE_PLUGINS = "plugins"
-SERVICE_SECURITY = "security"
-MIGRATION_COPIES_DIR = "migraciones"
+if TYPE_CHECKING:
+    from natxajo_auditor.configuration.manager import ConfigurationManager
+    from natxajo_auditor.modules.manager import ModuleManager
+    from natxajo_auditor.plugins.manager import PluginManager
+    from natxajo_auditor.security.service import SecurityService
+    from natxajo_auditor.storage.audit import AuditLog
+    from natxajo_auditor.storage.backups import BackupManager
+    from natxajo_auditor.storage.outbox import EventOutbox
+    from natxajo_auditor.versioning.manager import VersionManager
+
+__all__ = [
+    "SERVICE_AUDIT",
+    "SERVICE_BACKUPS",
+    "SERVICE_CONFIGURATION",
+    "SERVICE_DATABASE",
+    "SERVICE_MODULES",
+    "SERVICE_OUTBOX",
+    "SERVICE_PLUGINS",
+    "SERVICE_SECURITY",
+    "SERVICE_VERSIONS",
+    "Kernel",
+]
 
 
 class Kernel:
@@ -49,11 +76,11 @@ class Kernel:
         context: RuntimeContext,
         kernel_version: str = __version__,
         *,
-        password_iterations: int = DEFAULT_ITERATIONS,
+        password_iterations: int = DEFAULT_PASSWORD_ITERATIONS,
         clock: Clock = utc_now,
     ) -> None:
-        if password_iterations < MIN_ITERATIONS:
-            raise ValueError(f"password_iterations debe ser al menos {MIN_ITERATIONS}")
+        if password_iterations < MIN_PASSWORD_ITERATIONS:
+            raise ValueError(f"password_iterations debe ser al menos {MIN_PASSWORD_ITERATIONS}")
         self.context = context
         self.kernel_version = kernel_version
         self._password_iterations = password_iterations
@@ -70,65 +97,14 @@ class Kernel:
         """Arranca los servicios en orden. Si algo falla, el núcleo queda en estado FAILED."""
         self._lifecycle.transition(LifecycleState.STARTING)
         try:
-            self.context.config_dir.mkdir(parents=True, exist_ok=True)
-            self.context.storage_dir.mkdir(parents=True, exist_ok=True)
-
-            database_path = self.context.storage_dir / "natxajo.db"
-            existed = database_path.exists()
-            database = Database(database_path)
-            database.open()
-            self.services.register(SERVICE_DATABASE, database)
-            pending = pending_versions(database)
-            if existed and pending:
-                # Copia previa a la migración: si la migración falla, la base anterior sigue ahí.
-                copies = self.context.storage_dir / MIGRATION_COPIES_DIR
-                database.snapshot(copies / f"natxajo-previa-v{pending[0]}-{utc_stamp()}.db")
-            apply_migrations(database)
-
-            outbox = EventOutbox(database, self._clock)
-            outbox.register(AuditConsumer())
-            self.services.register(SERVICE_OUTBOX, outbox)
-            audit = AuditLog(database, outbox)
-            self.services.register(SERVICE_AUDIT, audit)
-            # Eventos que quedaron pendientes en una parada anterior: se entregan antes de seguir.
-            outbox.dispatch_pending()
-
-            self.services.register(
-                SERVICE_CONFIGURATION, ConfigurationManager(self.context.config_dir)
-            )
-            self.services.register(
-                SERVICE_BACKUPS, BackupManager(self.context.storage_dir / "backups")
-            )
-            modules = ModuleManager(self.context.modules_dir, database, audit)
-            self.services.register(SERVICE_MODULES, modules)
-            self.services.register(
-                SERVICE_VERSIONS,
-                VersionManager(
-                    registry=VersionRegistry(self.context.versions_dir),
-                    database=database,
-                    audit=audit,
-                    kernel_version=self.kernel_version,
-                    module_enabled=modules.is_enabled,
-                ),
-            )
-            security = SecurityService(
-                database=database,
-                audit=audit,
+            compose(
+                self.services,
+                self.context,
+                kernel_version=self.kernel_version,
                 clock=self._clock,
                 password_iterations=self._password_iterations,
             )
-            self.services.register(SERVICE_SECURITY, security)
-            self.services.register(
-                SERVICE_PLUGINS,
-                PluginManager(
-                    plugins_dir=self.context.plugins_dir,
-                    database=database,
-                    audit=audit,
-                    kernel_version=self.kernel_version,
-                    gate=security.guard,
-                ),
-            )
-            audit.record("kernel.started", {"version": self.kernel_version})
+            self.audit.record("kernel.started", {"version": self.kernel_version})
         except Exception:
             self._lifecycle.transition(LifecycleState.FAILED)
             self._close_services()
@@ -164,38 +140,37 @@ class Kernel:
 
     @property
     def configuration(self) -> ConfigurationManager:
-        return cast(ConfigurationManager, self.services.get(SERVICE_CONFIGURATION))
+        return self.services.fetch(CONFIGURATION)
 
     @property
     def outbox(self) -> EventOutbox:
-        return cast(EventOutbox, self.services.get(SERVICE_OUTBOX))
+        return self.services.fetch(OUTBOX)
 
     @property
     def audit(self) -> AuditLog:
-        return cast(AuditLog, self.services.get(SERVICE_AUDIT))
+        return self.services.fetch(AUDIT)
 
     @property
     def backups(self) -> BackupManager:
-        return cast(BackupManager, self.services.get(SERVICE_BACKUPS))
+        return self.services.fetch(BACKUPS)
 
     @property
     def modules(self) -> ModuleManager:
-        return cast(ModuleManager, self.services.get(SERVICE_MODULES))
+        return self.services.fetch(MODULES)
 
     @property
     def versions(self) -> VersionManager:
-        return cast(VersionManager, self.services.get(SERVICE_VERSIONS))
+        return self.services.fetch(VERSIONS)
 
     @property
     def plugins(self) -> PluginManager:
-        return cast(PluginManager, self.services.get(SERVICE_PLUGINS))
+        return self.services.fetch(PLUGINS)
 
     @property
     def security(self) -> SecurityService:
-        return cast(SecurityService, self.services.get(SERVICE_SECURITY))
+        return self.services.fetch(SECURITY)
 
     def _close_services(self) -> None:
         if self.services.has(SERVICE_DATABASE):
-            database = cast(Database, self.services.get(SERVICE_DATABASE))
-            database.close()
+            self.services.fetch(DATABASE).close()
         self.services.clear()
