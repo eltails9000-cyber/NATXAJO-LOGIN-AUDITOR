@@ -42,7 +42,6 @@ from natxajo_auditor.kernel.composition import (
     compose,
 )
 from natxajo_auditor.kernel.context import RuntimeContext
-from natxajo_auditor.kernel.event_bus import EventBus
 from natxajo_auditor.kernel.lifecycle import Lifecycle, LifecycleState
 from natxajo_auditor.kernel.service_container import ServiceContainer
 
@@ -86,7 +85,6 @@ class Kernel:
         self._password_iterations = password_iterations
         self._clock = clock
         self.services = ServiceContainer()
-        self.events = EventBus()
         self._lifecycle = Lifecycle()
 
     @property
@@ -109,7 +107,6 @@ class Kernel:
             self._lifecycle.transition(LifecycleState.FAILED)
             self._close_services()
             raise
-        self.events.publish("kernel.started", None)
         self._lifecycle.transition(LifecycleState.RUNNING)
 
     def stop(self) -> None:
@@ -126,7 +123,6 @@ class Kernel:
                 self.audit.record("kernel.stopped", {})
         finally:
             self._close_services()
-        self.events.publish("kernel.stopped", None)
         self._lifecycle.transition(LifecycleState.STOPPED)
 
     def health(self) -> dict[str, Any]:
