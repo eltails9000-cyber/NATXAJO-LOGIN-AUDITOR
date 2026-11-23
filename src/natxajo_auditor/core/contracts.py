@@ -16,6 +16,14 @@ PLATFORM_COMPANY = "plataforma"
 SCOPE_DENIED = "la operación pertenece a otra empresa"
 APPROVE_PERMISSION = "seguridad:nucleo:permiso:aprobar"
 
+# Permisos de la etapa 4. La terminal y los servicios los comparten: se definen una sola vez.
+AUDIT_READ_PERMISSION = "auditoria:nucleo:evaluacion:leer"
+AUDIT_RUN_PERMISSION = "auditoria:nucleo:evaluacion:ejecutar"
+REPORT_READ_PERMISSION = "informes:nucleo:exportacion:leer"
+REPORT_EXPORT_PERMISSION = "informes:nucleo:exportacion:escribir"
+DIAGNOSTIC_PERMISSION = "mantenimiento:nucleo:diagnostico:leer"
+CLEANUP_PERMISSION = "mantenimiento:nucleo:limpieza:ejecutar"
+
 T = TypeVar("T")
 
 

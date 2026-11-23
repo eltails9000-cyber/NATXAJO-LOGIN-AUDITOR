@@ -80,6 +80,10 @@ CATALOG: Mapping[str, EventSpec] = {
     "installation.code_rejected": _spec(_SEC, "intentos"),
     "installation.completed": _spec(_SEC, "username"),
     "company.created": _spec(_SEC, "empresa nombre"),
+    "audit.run_recorded": _spec(_OP, "run_id profile passed failed not_evaluable risk"),
+    "report.exported": _spec(_OP, "run_id report_id format"),
+    "report.failed": _spec(_OP, "run_id format reason"),
+    "maintenance.cleanup_applied": _spec(_OP, "removed"),
 }
 
 JsonValue = str | int | bool | None | list[str]

@@ -42,6 +42,8 @@ PROTECTED_TABLES = frozenset(
     {
         "account_roles",
         "accounts",
+        "audit_findings",
+        "audit_runs",
         "companies",
         "event_deliveries",
         "event_outbox",
@@ -52,6 +54,7 @@ PROTECTED_TABLES = frozenset(
         "plugin_installs",
         "plugin_publishers",
         "plugin_reviews",
+        "report_exports",
         "role_grants",
         "role_parents",
         "roles",

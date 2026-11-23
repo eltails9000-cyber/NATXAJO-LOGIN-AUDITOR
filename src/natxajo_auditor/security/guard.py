@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TypeVar
 
-from natxajo_auditor.core.contracts import SCOPE_DENIED
+from natxajo_auditor.core.contracts import CLEANUP_PERMISSION, SCOPE_DENIED
 from natxajo_auditor.core.exceptions import AuthorizationError
 from natxajo_auditor.security.accounts import AccountStore
 from natxajo_auditor.security.authorization import Authorizer
@@ -38,6 +38,8 @@ CRITICAL_PERMISSIONS: frozenset[str] = frozenset(
         # Confianza global: editores de confianza y decisiones de revisión de terceros.
         "plugins:nucleo:editor:administrar",
         "plugins:nucleo:revision:administrar",
+        # Borra archivos temporales del disco: destructiva, exige confirmación y reautenticación.
+        CLEANUP_PERMISSION,
     }
 )
 
