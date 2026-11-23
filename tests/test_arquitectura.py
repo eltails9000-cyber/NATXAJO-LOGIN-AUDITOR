@@ -27,15 +27,41 @@ ALLOWED: dict[str, frozenset[str]] = {
     "security": frozenset({"core", "storage"}),
     "modules": frozenset({"core", "storage"}),
     "plugins": frozenset({"core", "storage"}),
+    "auditing": frozenset({"core", "storage"}),
+    "reporting": frozenset({"auditing", "core", "storage"}),
+    "maintenance": frozenset({"core", "storage"}),
     "kernel": frozenset(
-        {"core", "configuration", "modules", "plugins", "security", "storage", "versioning"}
+        {
+            "auditing",
+            "configuration",
+            "core",
+            "maintenance",
+            "modules",
+            "plugins",
+            "reporting",
+            "security",
+            "storage",
+            "versioning",
+        }
     ),
     "interfaces": frozenset({"core", "kernel"}),
     ROOT_PACKAGE: frozenset({"core", "kernel", "interfaces"}),
 }
 PACKAGES = frozenset(ALLOWED) - {ROOT_PACKAGE}
 # Subsistemas concretos: solo la composición del núcleo puede importarlos en tiempo de ejecución.
-SUBSYSTEMS = frozenset({"configuration", "modules", "plugins", "security", "storage", "versioning"})
+SUBSYSTEMS = frozenset(
+    {
+        "auditing",
+        "configuration",
+        "maintenance",
+        "modules",
+        "plugins",
+        "reporting",
+        "security",
+        "storage",
+        "versioning",
+    }
+)
 # Módulos que poseen una función de hash. Son las únicas rutas (relativas a src) que importan hashlib.
 HASH_OWNERS = frozenset({"core/utilities.py", "core/ed25519.py", "security/passwords.py"})
 DYNAMIC_PACKAGES = frozenset({"modules", "plugins"})

@@ -20,14 +20,17 @@ from natxajo_auditor import __version__
 from natxajo_auditor.core.utilities import Clock, utc_now
 from natxajo_auditor.kernel.composition import (
     AUDIT,
+    AUDITING,
     BACKUPS,
     CONFIGURATION,
     DATABASE,
     DEFAULT_PASSWORD_ITERATIONS,
+    MAINTENANCE,
     MIN_PASSWORD_ITERATIONS,
     MODULES,
     OUTBOX,
     PLUGINS,
+    REPORTS,
     SECURITY,
     SERVICE_AUDIT,
     SERVICE_BACKUPS,
@@ -46,9 +49,12 @@ from natxajo_auditor.kernel.lifecycle import Lifecycle, LifecycleState
 from natxajo_auditor.kernel.service_container import ServiceContainer
 
 if TYPE_CHECKING:
+    from natxajo_auditor.auditing.service import AuditingService
     from natxajo_auditor.configuration.manager import ConfigurationManager
+    from natxajo_auditor.maintenance.service import MaintenanceService
     from natxajo_auditor.modules.manager import ModuleManager
     from natxajo_auditor.plugins.manager import PluginManager
+    from natxajo_auditor.reporting.service import ReportService
     from natxajo_auditor.security.service import SecurityService
     from natxajo_auditor.storage.audit import AuditLog
     from natxajo_auditor.storage.backups import BackupManager
@@ -165,6 +171,18 @@ class Kernel:
     @property
     def security(self) -> SecurityService:
         return self.services.fetch(SECURITY)
+
+    @property
+    def auditing(self) -> AuditingService:
+        return self.services.fetch(AUDITING)
+
+    @property
+    def reports(self) -> ReportService:
+        return self.services.fetch(REPORTS)
+
+    @property
+    def maintenance(self) -> MaintenanceService:
+        return self.services.fetch(MAINTENANCE)
 
     def _close_services(self) -> None:
         if self.services.has(SERVICE_DATABASE):
