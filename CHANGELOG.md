@@ -2,6 +2,29 @@
 
 ## [Sin publicar]
 
+- Etapa 4: motor de auditoría sin conexión, informes, mantenimiento y terminal (rama
+  `etapa-4-auditoria-informes-mantenimiento`).
+  - Motor (`auditing/`): 17 reglas de autenticación configurables dentro de límites fijos, perfiles
+    `completo` y `critico`, huella canónica de la configuración, validación de resultados y
+    evaluaciones inmutables. Migración 10, reversible.
+  - Informes (`reporting/`): JSON, CSV, HTML y TXT. Exportación atómica registrada en la misma
+    transacción, verificación de cinco estados y evento de fallo con motivo recortado.
+  - Mantenimiento (`maintenance/`): diagnóstico de ocho comprobaciones y limpieza de temporales
+    `*.tmp` con plan previo, confirmación y reautenticación. Nunca sigue enlaces.
+  - Terminal: opciones 20 a 28. Tipos compartidos en `console.py` y acciones por áreas en
+    `operaciones.py`. Las operaciones con guardián no se registran dos veces.
+  - Eventos: `audit.run_recorded`, `report.exported`, `report.failed` y
+    `maintenance.cleanup_applied`. El catálogo pasa de 35 a 39 tipos.
+  - Permisos nuevos: auditoría (evaluar y leer), informes (exportar y leer), diagnóstico y limpieza
+    (solo plataforma; la limpieza es crítica).
+  - Lanzador: detecta Python 3.11 real, ignora los alias de la Microsoft Store, comprueba `main.py`
+    y da errores claros. Escrito con BOM UTF-8. No se ha ejecutado en Windows.
+  - Cambios de expectativa en pruebas existentes: la migración 10 y los tres servicios nuevos en
+    `test_storage.py`, `test_migrations_stage2.py` y `test_kernel_characterization.py`.
+  - Pendiente: pruebas activas de auditoría, actualización, rollback y cuarentena de plugins,
+    restauración desde la terminal e interfaz de escritorio.
+  - Pruebas: 457 recogidas, 456 aprobadas, 0 fallidas y 1 omitida (lanzador sin PowerShell).
+
 - Etapa 3, fase A (P-05): editores de confianza protegidos en el servicio y en la base.
   - Dar de alta (`register_publisher`), revocar (`revoke_publisher`) y revisar un plugin de
     terceros (`record_review`) exigen sesión, un permiso crítico, ámbito de plataforma,

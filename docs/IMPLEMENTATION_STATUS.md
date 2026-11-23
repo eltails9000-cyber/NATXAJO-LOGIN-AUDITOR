@@ -10,7 +10,7 @@ aparece en el documento maestro.
   la etapa 3). No fusionada en `main`. La etapa 2 aplicó las tres decisiones aprobadas: modelo
   multiempresa con `company_id` fijado por el servidor, instalador del primer administrador con
   código de un solo uso, y bus de eventos integrado con la auditoría. La etapa 1 (auditoría) está
-  en `docs/CLAUDE_ARCHITECTURE_AUDIT.md`. Las etapas 4 a 16 no se han iniciado.
+  en `docs/CLAUDE_ARCHITECTURE_AUDIT.md`. La etapa 4 (auditoría, informes y mantenimiento) está en la rama `etapa-4-auditoria-informes-mantenimiento`, con su matriz en `docs/MATRIZ_ETAPA_4.md`. Las etapas 5 a 16 no se han iniciado.
 - **Fase del repositorio:** 7 (seguridad y RBAC), en estado parcial. La etapa 2 se integra en esta
   fase. Las fases 3 a 6 no cambian de estado en esta etapa.
 
@@ -35,13 +35,13 @@ aparece en el documento maestro.
 | 6 | Plugins: firma, integridad, editores, catálogo, revisión y ciclo de vida | PARCIAL |
 | 7 | Seguridad, RBAC, sesiones, guardián, multiempresa, instalador y bus de eventos (etapa 2) | PARCIAL |
 | 8 | Motor de automatización | PENDIENTE |
-| 9 | Motor de auditoría defensiva | PENDIENTE |
+| 9 | Motor de auditoría defensiva: evaluación sin conexión (etapa 4). Pruebas activas pendientes | PARCIAL |
 | 10 | Aplicación de escritorio y terminal avanzada | PENDIENTE |
-| 11 | Diagnósticos, informes y analítica | PENDIENTE |
-| 12 | Mantenimiento, actualizaciones y recuperación | PENDIENTE |
+| 11 | Diagnósticos, informes y analítica: informes JSON, CSV, HTML y TXT con verificación (etapa 4). Analítica pendiente | PARCIAL |
+| 12 | Mantenimiento, actualizaciones y recuperación: diagnóstico, limpieza de temporales y comprobación de migraciones (etapa 4). Restauración desde la terminal y actualizaciones pendientes | PARCIAL |
 | 13 | Pruebas integrales y distribución | PENDIENTE |
 
-Pruebas automatizadas: 325 casos. Desglose: 279 de las etapas 1 y 2 y de la auditoría posterior
+Pruebas automatizadas de la etapa 3: 325 casos. Rama de la etapa 4: 457 recogidas, 456 aprobadas, 0 fallidas y 1 omitida (lanzador sin PowerShell), de ellas 132 nuevas (`docs/MATRIZ_ETAPA_4.md`). Desglose de la etapa 3: 279 de las etapas 1 y 2 y de la auditoría posterior
 (214 de la etapa 1, de las que 4 cambiaron de procedimiento o de expectativa; 48 de la etapa 2;
 17 de la auditoría posterior, en `tests/test_auditoria_postimplementacion.py`); 18 de editores de
 confianza (P-05); 5 de dependencias (P-17); 7 de caracterización del kernel; 16 de arquitectura.
@@ -163,7 +163,7 @@ Windows no está verificado (ver `docs/PRUEBAS_WINDOWS.md`).
 - **Instalador.** Código de 128 bits, guardado solo como hash PBKDF2, válido 30 minutos y con cinco
   intentos fallidos como máximo. Un solo uso. Al completarse, la instalación queda cerrada por un
   disparador. Mientras no se completa, no se pueden crear cuentas.
-- **Bus de eventos.** Catálogo cerrado de 34 tipos, cada uno con sus claves obligatorias y
+- **Bus de eventos.** Catálogo cerrado de 39 tipos (35 en la etapa 3 y cuatro nuevos en la etapa 4), cada uno con sus claves obligatorias y
   opcionales. Outbox transaccional: el evento se guarda en la misma transacción que el cambio y se
   entrega tras confirmarla. Consumidores idempotentes con registro de entregas, reintentos, cola de
   fallidos y reenvío al arrancar. La auditoría es un consumidor más.
@@ -240,6 +240,63 @@ Riesgos abiertos:
 Verificación final: 325 pruebas en Python 3.13.18 y 3.11.18 (Linux), ruff check, ruff format
 --check y mypy estricto (61 archivos). Instalación no editable del paquete en 3.11, sin
 dependencias.
+
+## Etapa 4: auditoría, informes y mantenimiento (CRITERIOS CUMPLIDOS EN LINUX; WINDOWS NO VERIFICADO)
+
+Rama `etapa-4-auditoria-informes-mantenimiento`, desde `etapa-3-kernel-composicion` (`6e3c26d`). No
+fusionada en `main`. Funcionalidades, archivos y pruebas: `docs/MATRIZ_ETAPA_4.md`.
+
+| Fase | Commit | Contenido |
+|---|---|---|
+| 1 | `12a084a` | Migración 10, eventos, permisos y tablas protegidas |
+| 2 | `13a22b1` | Motor de auditoría, informes y mantenimiento, con cableado en el núcleo |
+| 3 | `469b4a0` | Pruebas de motor, servicio, informes, mantenimiento, migraciones y aislamiento |
+| 4 | `e8a47a4` | Terminal: opciones 20 a 28 |
+| 5 | `cd546a3` | Lanzador de Windows |
+| 6 | último commit de la rama | Documentación y matriz |
+
+Verificado en Linux:
+
+- **Motor de auditoría.** 17 reglas configurables dentro de límites fijos, perfiles `completo` y
+  `critico`, evaluación sin conexión de una configuración declarada, huella canónica, validación de
+  resultados y evaluaciones inmutables. Detalle en `docs/AUDITORIA_MOTOR.md`.
+- **Informes.** JSON, CSV, HTML y TXT. Exportación atómica registrada en la misma transacción,
+  verificación de cinco estados y evento de fallo con motivo recortado. Detalle en `docs/INFORMES.md`.
+- **Mantenimiento.** Diagnóstico de ocho comprobaciones y limpieza de temporales crítica, con plan
+  previo, confirmación y reautenticación. Detalle en `docs/MANTENIMIENTO.md`.
+- **Migración 10.** Desde base nueva, desde la versión 9 con datos, reversión sin perder datos
+  anteriores, interrupción sin tablas parciales y comprobación de la versión de SQLite antes de
+  revertir migraciones que usan `DROP COLUMN`.
+- **Terminal.** Opciones 20 a 28. Las operaciones con guardián no se envuelven dos veces.
+- **Lanzador.** Revisado y reescrito. Solo hay pruebas estáticas: no se ha ejecutado en Windows.
+
+Cambios deliberados en pruebas existentes: `tests/test_storage.py`, `tests/test_migrations_stage2.py`
+y `tests/test_kernel_characterization.py` esperan ahora la migración 10 y los tres servicios nuevos.
+Son cambios de expectativa, no ocultaciones.
+
+Corrección de documentación: esta sección decía 34 eventos. El catálogo de la etapa 3 tenía 35 tipos,
+y la etapa 4 añade cuatro: 39 en total.
+
+Pendiente:
+
+- Pruebas activas de auditoría (TLS, HTTP, formularios). Requieren registro de alcance y autorización.
+- Plugins: actualización, rollback y cuarentena no existen. No hay ejecución de plugins.
+- Restauración de copias desde la terminal. Existe en la API, con autorización explícita.
+- Verificación criptográfica de la autorización escrita y firma de informes. No hay PDF.
+- Interfaz de escritorio (fase 10).
+- Windows: el lanzador no se ha ejecutado y la terminal no se ha probado en Windows.
+
+Riesgos abiertos:
+
+- La migración 10 se ha probado con bases construidas con las migraciones, no con una instalación real
+  de producción.
+- La huella de la configuración demuestra que el contenido no cambió; no demuestra quién lo escribió.
+- P-01 sigue abierto: la API interna del núcleo no pide token.
+
+Verificación final de la rama: 457 pruebas recogidas; 456 aprobadas, 0 fallidas y 1 omitida
+(`tests/test_lanzador.py`, análisis sintáctico con PowerShell, no disponible). `ruff check .` sin
+errores; `ruff format --check .` sin cambios pendientes (122 archivos); `mypy --strict src` sin errores
+(78 archivos).
 
 ## Auditoría posterior a la etapa 2
 

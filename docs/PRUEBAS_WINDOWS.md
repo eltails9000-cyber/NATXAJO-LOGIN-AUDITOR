@@ -126,6 +126,24 @@ rastreo de error (es lo esperado, ver A-13 en `docs/AUDITORIA_ETAPA_2.md`). Desp
 terminal y compruebe que la base no quedó dañada: vuelva a arrancar el lanzador como en el paso 4.3
 y verifique que la instalación y las cuentas siguen ahí.
 
+**4.5 Alias de la Microsoft Store.** Si el equipo tiene los alias de `python.exe` de la Microsoft
+Store y ningún Python instalado, el lanzador debe fallar con el mensaje «no se encontró Python 3.11 o
+posterior» y salir con código 1, sin abrir la Store ni quedarse esperando. Compruébelo con
+`$LASTEXITCODE`.
+
+**4.6 Rutas y argumentos.** Copie el proyecto a una carpeta con espacios y acentos (por ejemplo
+`C:\Pruebas Ñandú\proyecto`) y ejecute el lanzador con `--version`. Debe funcionar y salir con
+código 0. Con un `main.py` ausente, debe mostrar «no se encuentra main.py» y salir con código 1.
+
+**4.7 Terminal de la etapa 4.** Con una cuenta administradora:
+
+1. Evalúe un archivo JSON con la ruta entre comillas (opción 20).
+2. Exporte el informe en los cuatro formatos (opción 23) y verifíquelos (opción 25).
+3. Cree un archivo `*.tmp` antiguo en `config\` y ejecute la limpieza (opción 27). Primero debe
+   mostrar el plan y pedir confirmación. Sin reautenticación reciente, la operación debe rechazarse
+   y el archivo debe seguir ahí.
+4. Abra los cuatro informes y compruebe que se leen bien en Windows.
+
 ## 5. Específico de Windows
 
 **5.1 Bloqueo de archivos.** Abra `config\app.json` en el Bloc de notas mientras la plataforma

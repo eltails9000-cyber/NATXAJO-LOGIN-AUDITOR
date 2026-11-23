@@ -89,8 +89,36 @@ Estos límites vienen del documento maestro y no se relajan:
   otra cosa falla y se reintenta hasta la cola de fallidos. Límite: la lista de tablas protegidas es
   manual, y el autorizador se ha comprobado en Linux, no en Windows.
 
+## Controles de la etapa 4
+
+- **Auditoría sin conexión.** El motor no envía solicitudes al sistema evaluado. Lee un documento
+  declarado y, en la terminal, un archivo local. Registrar una evaluación exige una referencia de
+  autorización escrita, pero la plataforma no la verifica.
+- **Permisos nuevos.** `auditoria:nucleo:evaluacion:ejecutar` y `:leer`,
+  `informes:nucleo:exportacion:escribir` y `:leer`, y `mantenimiento:nucleo:diagnostico:leer`. La
+  limpieza, `mantenimiento:nucleo:limpieza:ejecutar`, es crítica. El diagnóstico y la limpieza son
+  solo de plataforma: una cuenta de empresa, aunque sea administradora, no las ejecuta.
+- **Aislamiento entre empresas.** Evaluaciones, informes y sus historiales son de una empresa. Una
+  evaluación ajena responde igual que una inexistente.
+- **Inmutabilidad.** Evaluaciones, hallazgos y exportaciones no se modifican ni se borran, por
+  disparadores. Si alguien los quita y altera un hallazgo, la carga lo detecta.
+- **Entrada.** Documentos con JSON estricto, límite de 256 KiB y claves desconocidas rechazadas sin
+  repetirlas. Los archivos deben ser regulares: los enlaces simbólicos se rechazan.
+- **Informes.** Las celdas CSV que podrían ejecutarse como fórmula se neutralizan. El HTML escapa
+  todos los valores y no carga recursos externos. La empresa se valida antes de tocar el disco.
+- **Limpieza.** Solo borra `*.tmp` regulares dentro de `config/`, `storage/` y `reports/`. Nunca sigue
+  enlaces ni toca archivos fuera de esas carpetas. Exige confirmación y reautenticación reciente.
+- **Reversión de migraciones.** Se comprueba la versión de SQLite antes de cambiar nada cuando la
+  reversión necesita `DROP COLUMN`.
+- **Límites.** No hay pruebas activas, verificación criptográfica de la autorización ni firma de
+  informes.
+
 ## Qué NO está implementado
 
+- **Auditoría activa.** No hay pruebas contra sistemas en ejecución (TLS, cabeceras HTTP, formularios).
+  Requieren un registro de alcance y autorización que todavía no existe.
+- **Actualización, rollback y cuarentena de plugins.** No existen. El rollback que sí hay es el de las
+  versiones del núcleo.
 - **Aislamiento de módulos.** No hay procesos separados, límites de recursos ni sandbox. Ningún
   módulo se ejecuta todavía, así que los permisos que un módulo declara no se aplican a ningún
   código. Los permisos de las operaciones de la plataforma sí se aplican. Cuando exista ejecución

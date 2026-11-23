@@ -1,7 +1,7 @@
 # NATXAJO-LOGIN-AUDITOR
 Professional Windows authentication security auditing tool built with Python and PowerShell. Includes login form analysis, controlled authentication testing, password policy evaluation, rate-limit auditing and security reports.
 
-> La descripción anterior es el alcance objetivo del proyecto. Hoy están implementados el núcleo, la configuración, las versiones, los módulos, la verificación de plugins y el control de acceso; las funciones de auditoría todavía no existen (ver `docs/IMPLEMENTATION_STATUS.md`).
+> La descripción anterior es el alcance objetivo del proyecto. Hoy están implementados el núcleo, la configuración, las versiones, los módulos, la verificación de plugins, el control de acceso, un motor de auditoría que evalúa configuraciones declaradas sin conexión, los informes y el mantenimiento básico. No hay pruebas activas contra sistemas en ejecución (ver `docs/IMPLEMENTATION_STATUS.md`).
 
 Solo debe usarse sobre sistemas propios o con autorización verificable por escrito. No incluye fuerza bruta, credential stuffing, adivinación de contraseñas, evasión de controles ni recolección de credenciales reales. Ver `docs/seguridad.md`.
 
@@ -26,7 +26,8 @@ política de ejecución por defecto de Windows, el script no se ejecuta; use:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher.ps1
 ```
 
-El lanzador no se ha ejecutado todavía en Windows. El procedimiento de prueba está en
+El lanzador no se ha ejecutado todavía en Windows: su texto tiene pruebas estáticas, pero la
+ejecución real requiere un equipo Windows. El procedimiento de prueba está en
 `docs/PRUEBAS_WINDOWS.md`.
 
 Los datos de ejecución (`config/`, `storage/`) se crean en la carpeta del proyecto la primera vez y no se versionan.
@@ -53,6 +54,10 @@ Versiones probadas, rangos y limitaciones del bloqueo: `docs/DEPENDENCIAS.md`.
 - `docs/seguridad.md`: límites de uso, controles implementados y lo que no está implementado.
 - `docs/DEPENDENCIAS.md`: rangos de desarrollo, bloqueo, versiones probadas y lo no verificado.
 - `docs/IMPLEMENTATION_STATUS.md`: estado verificado de cada fase.
+- `docs/AUDITORIA_MOTOR.md`: motor de auditoría, esquema del documento, reglas y perfiles.
+- `docs/INFORMES.md`: formatos de informe, exportación, verificación y eventos.
+- `docs/MANTENIMIENTO.md`: diagnóstico, limpieza de temporales y recuperación ante errores.
+- `docs/MATRIZ_ETAPA_4.md`: funcionalidades, archivos y pruebas de la etapa 4.
 - `docs/CLAUDE_ARCHITECTURE_AUDIT.md`: auditoría de arquitectura y plan de corrección por etapas.
 - `CHANGELOG.md`: historial de cambios.
 
@@ -62,4 +67,6 @@ Implementado: núcleo con ciclo de vida, configuración validada con historial y
 
 Multiempresa: las cuentas pertenecen a una empresa y el ámbito se comprueba en el guardián; faltan aplicaciones y entornos. Instalador con código de un solo uso y bus de eventos con auditoría.
 
-Pendiente: ejecución de módulos y plugins, gestión de plugins y de permisos desde la terminal, automatización, motor de auditoría, interfaz de escritorio, informes y mantenimiento. No se declaran como disponibles hasta que tengan pruebas.
+Etapa 4: motor de auditoría sin conexión (17 reglas, perfiles y evaluaciones inmutables), informes JSON, CSV, HTML y TXT con verificación, diagnóstico y limpieza de temporales, y terminal con las opciones 20 a 28.
+
+Pendiente: ejecución de módulos y plugins, actualización, rollback y cuarentena de plugins, gestión de plugins y de permisos desde la terminal, restauración de copias desde la terminal, automatización, pruebas activas de auditoría e interfaz de escritorio. No se declaran como disponibles hasta que tengan pruebas.
