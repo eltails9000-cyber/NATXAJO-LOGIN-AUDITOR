@@ -2,6 +2,15 @@
 
 ## [Sin publicar]
 
+- Interfaz gráfica local (`python main.py --gui`): panel, auditoría, usuarios, sesiones,
+  plugins, módulos, reportes, eventos, seguridad, mantenimiento y configuración. Servidor en
+  127.0.0.1 con biblioteca estándar, sin CDN ni dependencias nuevas. Operaciones existentes
+  con su guardián, confirmación y reautenticación. Preferencias en `config/interfaz.json`.
+  Detalle en `docs/INTERFAZ_GRAFICA.md`.
+  - Sesiones: listado de solo lectura sin fichas ni huellas (`SessionStore.list_live`).
+  - Límite de sesiones simultáneas: error propio (`SessionLimitError`), distinguible de las
+    credenciales incorrectas.
+  - Empaquetado: `static/*` incluido en el paquete.
 - Etapa 4: motor de auditoría sin conexión, informes, mantenimiento y terminal (rama
   `etapa-4-auditoria-informes-mantenimiento`).
   - Motor (`auditing/`): 17 reglas de autenticación configurables dentro de límites fijos, perfiles

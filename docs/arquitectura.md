@@ -19,6 +19,9 @@ interfaces  ──►  kernel  ──►  security, configuration, storage, vers
 - `modules` y `plugins` solo importan `core` y `storage`. Consumen contratos públicos de `core`.
 - `interfaces` solo consume servicios del núcleo. No importa `security` ni `storage`. No contiene
   reglas de negocio.
+- La interfaz gráfica vive en `interfaces/gui/`. Sus módulos importan solo `core`, `kernel` y
+  otros módulos de `gui` por su ruta completa. Ningún módulo importa el paquete `gui` en sí:
+  su `__init__` importa `server`, y esa importación crearía un ciclo.
 
 ## Reglas de dependencia
 
