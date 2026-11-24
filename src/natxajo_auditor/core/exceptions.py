@@ -35,6 +35,10 @@ class SessionError(AuthorizationError):
     """La sesión no existe, está revocada o ha caducado."""
 
 
+class SessionLimitError(AuthorizationError):
+    """La cuenta ya tiene abiertas el máximo de sesiones simultáneas."""
+
+
 class VersionError(NatxajoError):
     """Versión no disponible, incompatible o no cargable."""
 

@@ -261,3 +261,17 @@ jobs:
 Un resultado verde en esa plantilla es prueba automatizada en Windows. No sustituye a las
 comprobaciones manuales de las secciones 4 y 5, que requieren interacción real con el lanzador y
 la consola.
+
+## 8. Interfaz gráfica (`--gui`)
+
+Pruebas manuales pendientes en Windows. No se han ejecutado todavía.
+
+- [ ] `python main.py --gui` imprime una dirección `http://127.0.0.1:<puerto>/` y abre el navegador.
+- [ ] `python main.py --gui --sin-navegador` imprime la dirección y no abre el navegador.
+- [ ] `python main.py --sin-navegador` sale con código 2 y un mensaje de uso.
+- [ ] La pantalla de acceso entra con la cuenta de administrador y muestra el panel.
+- [ ] Las once secciones abren sin errores en la consola del navegador (F12).
+- [ ] Una operación crítica pide confirmación y, si corresponde, la contraseña.
+- [ ] Ctrl+C en la consola detiene la interfaz y libera el puerto.
+- [ ] `config\interfaz.json` con un valor no válido no impide arrancar y muestra un aviso.
+- [ ] El menú lateral se abre y se cierra con el botón de menú en una ventana estrecha.

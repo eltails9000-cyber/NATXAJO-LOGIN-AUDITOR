@@ -11,7 +11,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from natxajo_auditor.core.exceptions import AuthorizationError, SessionError
+from natxajo_auditor.core.exceptions import SessionError, SessionLimitError
 from natxajo_auditor.core.utilities import Clock, from_iso, sha256_bytes, to_iso
 from natxajo_auditor.security.accounts import AccountStore
 from natxajo_auditor.storage.audit import AuditLog
@@ -21,6 +21,7 @@ IDLE_TIMEOUT = timedelta(minutes=15)
 ABSOLUTE_TIMEOUT = timedelta(hours=8)
 REAUTH_WINDOW = timedelta(minutes=5)
 MAX_CONCURRENT_SESSIONS = 3
+MAX_LISTED_SESSIONS = 500
 INVALID_SESSION = "sesión no válida"
 
 
@@ -29,6 +30,18 @@ class Session:
     session_id: int
     username: str
     reauth_at: datetime | None
+
+
+@dataclass(frozen=True)
+class SessionInfo:
+    """Estado de una sesión vigente para mostrarlo. No contiene la ficha ni su huella."""
+
+    username: str
+    company_id: str
+    created_at: str
+    last_activity: str
+    expires_at: str
+    reauthenticated: bool
 
 
 class SessionStore:
@@ -44,7 +57,7 @@ class SessionStore:
         # simultáneos no pueden superar el límite leyendo el mismo número de sesiones.
         with self._database.transaction() as connection:
             if len(self._live_rows(username, now)) >= MAX_CONCURRENT_SESSIONS:
-                raise AuthorizationError(
+                raise SessionLimitError(
                     f"máximo de {MAX_CONCURRENT_SESSIONS} sesiones simultáneas alcanzado; "
                     "cierre una sesión"
                 )
@@ -140,6 +153,42 @@ class SessionStore:
             return False
         age = self._clock() - session.reauth_at
         return timedelta(0) <= age <= REAUTH_WINDOW
+
+    def list_live(
+        self, accounts: AccountStore, *, company_id: str | None = None
+    ) -> list[SessionInfo]:
+        """Sesiones vigentes, más recientes primero. Con company_id, solo las de esa empresa.
+
+        Es de solo lectura: no renueva la actividad ni cambia nada, y no devuelve fichas ni huellas.
+        """
+        now = self._clock()
+        rows = self._database.fetchall(
+            "SELECT username, created_at, last_activity, expires_at, reauth_at FROM sessions "
+            "WHERE revoked_at IS NULL ORDER BY id DESC"
+        )
+        listed: list[SessionInfo] = []
+        for username, created, last_activity, expires, reauth in rows:
+            if not _is_live(str(last_activity), str(expires), now):
+                continue
+            name = str(username)
+            owner = accounts.company_of(name)
+            if company_id is not None and owner != company_id:
+                continue
+            reauth_at = from_iso(None if reauth is None else str(reauth))
+            session = Session(session_id=0, username=name, reauth_at=reauth_at)
+            listed.append(
+                SessionInfo(
+                    username=name,
+                    company_id=owner,
+                    created_at=str(created),
+                    last_activity=str(last_activity),
+                    expires_at=str(expires),
+                    reauthenticated=self.recently_reauthenticated(session),
+                )
+            )
+            if len(listed) == MAX_LISTED_SESSIONS:
+                break
+        return listed
 
     def _live_rows(self, username: str, now: datetime) -> list[tuple[object, ...]]:
         rows = self._database.fetchall(

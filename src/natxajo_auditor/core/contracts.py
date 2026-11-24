@@ -31,6 +31,14 @@ PLUGIN_QUARANTINE_PERMISSION = "plugins:nucleo:cuarentena:escribir"
 PLUGIN_QUARANTINE_RELEASE_PERMISSION = "plugins:nucleo:cuarentena:administrar"
 PLUGIN_VERSION_PERMISSION = "plugins:nucleo:version:administrar"
 
+# Lectura de pantallas de la interfaz gráfica. Cada consulta pasa por el guardián.
+EVENT_READ_PERMISSION = "auditoria:nucleo:evento:leer"
+ACCOUNT_READ_PERMISSION = "seguridad:nucleo:cuenta:leer"
+SESSION_READ_PERMISSION = "seguridad:nucleo:sesion:leer"
+COMPANY_READ_PERMISSION = "seguridad:nucleo:empresa:leer"
+MODULE_READ_PERMISSION = "modulos:nucleo:modulo:leer"
+MODULE_EXECUTE_PERMISSION = "modulos:nucleo:modulo:ejecutar"
+
 T = TypeVar("T")
 
 

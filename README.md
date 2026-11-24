@@ -16,8 +16,12 @@ Desde la carpeta del proyecto:
 
 ```bash
 python main.py            # menú interactivo
+python main.py --gui      # interfaz gráfica en el navegador (solo 127.0.0.1)
 python main.py --version  # muestra la versión y sale
 ```
+
+La interfaz gráfica usa el navegador del equipo y se detiene con Ctrl+C en la consola. Su
+funcionamiento y sus límites están en `docs/INTERFAZ_GRAFICA.md`.
 
 En Windows también puede usarse `.\launcher.ps1`, que busca un Python 3.11 o posterior. Con la
 política de ejecución por defecto de Windows, el script no se ejecuta; use:
