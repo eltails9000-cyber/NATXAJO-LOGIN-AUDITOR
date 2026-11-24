@@ -23,6 +23,9 @@ natxajo-auditor = "natxajo_auditor.main:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"natxajo_auditor.interfaces.gui" = ["static/*"]
+
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
