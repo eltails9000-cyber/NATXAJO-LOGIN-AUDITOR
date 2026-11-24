@@ -24,6 +24,13 @@ REPORT_EXPORT_PERMISSION = "informes:nucleo:exportacion:escribir"
 DIAGNOSTIC_PERMISSION = "mantenimiento:nucleo:diagnostico:leer"
 CLEANUP_PERMISSION = "mantenimiento:nucleo:limpieza:ejecutar"
 
+# Plugins: estado (lectura), cuarentena (escribir, no crítica: es una medida defensiva), liberar
+# la cuarentena y cambiar de versión (ambas críticas: cambian qué código puede habilitarse).
+PLUGIN_READ_PERMISSION = "plugins:nucleo:estado:leer"
+PLUGIN_QUARANTINE_PERMISSION = "plugins:nucleo:cuarentena:escribir"
+PLUGIN_QUARANTINE_RELEASE_PERMISSION = "plugins:nucleo:cuarentena:administrar"
+PLUGIN_VERSION_PERMISSION = "plugins:nucleo:version:administrar"
+
 T = TypeVar("T")
 
 

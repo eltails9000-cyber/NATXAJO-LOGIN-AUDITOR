@@ -75,7 +75,7 @@ def _v9_with_data(path: Path) -> Database:
 
 def test_a_fresh_database_gets_every_evaluation_table_and_trigger(tmp_path: Path) -> None:
     database = _open(tmp_path / "nueva.db")
-    assert apply_migrations(database) == list(range(1, 11))
+    assert apply_migrations(database) == list(range(1, 12))
     assert pending_versions(database) == []
     assert NEW_TABLES <= _names(database, "table")
     assert NEW_TRIGGERS <= _names(database, "trigger")
@@ -103,8 +103,8 @@ def test_every_protected_table_exists_after_the_migrations(tmp_path: Path) -> No
 
 def test_upgrade_from_v9_keeps_every_row_and_adds_the_evaluation_tables(tmp_path: Path) -> None:
     database = _v9_with_data(tmp_path / "v9.db")
-    assert pending_versions(database) == [10]
-    assert apply_migrations(database) == [10]
+    assert pending_versions(database) == [10, 11]
+    assert apply_migrations(database) == [10, 11]
     assert database.fetchall("SELECT username, company_id FROM accounts") == [
         ("admin_viejo", "plataforma")
     ]
@@ -120,7 +120,7 @@ def test_upgrade_from_v9_keeps_every_row_and_adds_the_evaluation_tables(tmp_path
 def test_rolling_back_the_evaluation_migration_keeps_earlier_data(tmp_path: Path) -> None:
     database = _v9_with_data(tmp_path / "ida.db")
     apply_migrations(database)
-    assert rollback_migrations(database, 9) == [10]
+    assert rollback_migrations(database, 9) == [11, 10]
     assert _applied(database)[-1] == 9
     assert not (NEW_TABLES & _names(database, "table"))
     assert not (NEW_TRIGGERS & _names(database, "trigger"))
@@ -134,7 +134,7 @@ def test_reapplying_after_a_rollback_creates_the_evaluation_tables_again(tmp_pat
     database = _v9_with_data(tmp_path / "vuelta.db")
     apply_migrations(database)
     rollback_migrations(database, 9)
-    assert apply_migrations(database) == [10]
+    assert apply_migrations(database) == [10, 11]
     assert NEW_TABLES <= _names(database, "table")
     assert NEW_TRIGGERS <= _names(database, "trigger")
     assert database.fetchall("SELECT COUNT(*) FROM audit_runs") == [(0,)]
@@ -157,7 +157,7 @@ def test_recovery_after_an_interruption_applies_the_real_migration(tmp_path: Pat
     database = _v9_with_data(tmp_path / "recuperada.db")
     with pytest.raises(StorageError):
         apply_migrations(database, (*V9, BROKEN_EVALUATION))
-    assert apply_migrations(database) == [10]
+    assert apply_migrations(database) == [10, 11]
     assert NEW_TABLES <= _names(database, "table")
     assert database.fetchall("SELECT username FROM accounts") == [("admin_viejo",)]
     assert database.fetchall("PRAGMA integrity_check") == [("ok",)]
@@ -173,7 +173,7 @@ def test_the_rollback_checks_the_sqlite_version_before_changing_anything(
     with pytest.raises(StorageError, match="DROP COLUMN"):
         rollback_migrations(database, 5)
     monkeypatch.undo()
-    assert _applied(database) == list(range(1, 11))
+    assert _applied(database) == list(range(1, 12))
     assert NEW_TABLES <= _names(database, "table")
     assert database.fetchall("PRAGMA integrity_check") == [("ok",)]
     database.close()
@@ -185,6 +185,6 @@ def test_reverting_only_the_evaluation_migration_needs_no_drop_column(
     database = _v9_with_data(tmp_path / "sin_drop.db")
     apply_migrations(database)
     monkeypatch.setattr(sqlite3, "sqlite_version_info", (3, 34, 0))
-    assert rollback_migrations(database, 9) == [10]
+    assert rollback_migrations(database, 9) == [11, 10]
     monkeypatch.undo()
     database.close()

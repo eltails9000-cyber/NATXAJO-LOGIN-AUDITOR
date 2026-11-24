@@ -84,6 +84,10 @@ CATALOG: Mapping[str, EventSpec] = {
     "report.exported": _spec(_OP, "run_id report_id format"),
     "report.failed": _spec(_OP, "run_id format reason"),
     "maintenance.cleanup_applied": _spec(_OP, "removed"),
+    "plugin.quarantined": _spec(_SEC, "plugin version reason username"),
+    "plugin.quarantine_released": _spec(_SEC, "plugin version username"),
+    "plugin.updated": _spec(_OP, "plugin from to publisher username"),
+    "plugin.rolled_back": _spec(_OP, "plugin from to username"),
 }
 
 JsonValue = str | int | bool | None | list[str]

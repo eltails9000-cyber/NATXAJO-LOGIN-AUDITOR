@@ -471,6 +471,39 @@ MIGRATIONS: tuple[Migration, ...] = (
             "DROP TABLE audit_runs",
         ),
     ),
+    Migration(
+        version=11,
+        name="cuarentena_y_version_anterior_de_plugins",
+        statements=(
+            # Un plugin en cuarentena no puede habilitarse. La clave incluye la versión: liberar
+            # o actualizar no afecta a una cuarentena de otra versión.
+            """
+            CREATE TABLE plugin_quarantine (
+                plugin_id TEXT NOT NULL,
+                version TEXT NOT NULL,
+                reason TEXT NOT NULL CHECK (length(reason) BETWEEN 1 AND 200),
+                username TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (plugin_id, version)
+            )
+            """,
+            # Una sola versión anterior por plugin: la que se restaura al revertir.
+            """
+            CREATE TABLE plugin_history (
+                plugin_id TEXT PRIMARY KEY,
+                version TEXT NOT NULL,
+                publisher_key_id TEXT NOT NULL REFERENCES plugin_publishers (key_id),
+                integrity_sha256 TEXT NOT NULL CHECK (length(integrity_sha256) = 64),
+                dependencies TEXT NOT NULL,
+                retired_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+        ),
+        down=(
+            "DROP TABLE plugin_history",
+            "DROP TABLE plugin_quarantine",
+        ),
+    ),
 )
 
 _BOOKKEEPING = (
