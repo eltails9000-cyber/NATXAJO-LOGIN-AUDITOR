@@ -10,8 +10,8 @@ Estados:
 - **Parcial**: implementado con límites que se indican en la fila.
 - **Pendiente**: no implementado. Se declara aquí y en `docs/IMPLEMENTATION_STATUS.md`.
 
-Recuento de pruebas: 457 recogidas; 456 aprobadas, 0 fallidas y 1 omitida (análisis sintáctico del
-lanzador, que requiere PowerShell). Las 132 pruebas nuevas de esta etapa están en los archivos
+Recuento de pruebas: 498 recogidas; 497 aprobadas, 0 fallidas y 1 omitida (análisis sintáctico del
+lanzador, que requiere PowerShell). Las 173 pruebas nuevas de esta etapa están en los archivos
 marcados con «nuevo».
 
 ## A. Motor de auditoría
@@ -49,8 +49,9 @@ marcados con «nuevo».
 | Instalación y desinstalación controladas | Existente | `plugins/` | `test_plugin_lifecycle.py` |
 | Revisión de permisos antes de habilitar | Existente | `plugins/` | `test_plugin_lifecycle.py::test_third_party_plugin_needs_an_approved_review` |
 | Registro de decisiones | Existente | `plugins/` | `test_plugin_package.py::test_review_log_keeps_history_and_latest_decision` |
-| Actualización y rollback de plugins | Pendiente | — | `test_versioning.py` prueba el rollback de versiones del núcleo, no de plugins |
-| Cuarentena | Pendiente | — | — |
+| Actualización de plugins a una versión nueva del mismo editor | Nuevo: exige plugin deshabilitado, versión estrictamente mayor, mismo editor y copia verificada; conserva una versión anterior. Detalle en `docs/PLUGINS_CICLO.md` | `plugins/manager.py` (`update_package`), `storage/migrations.py` (migración 11) | `test_plugins_ciclo.py`: actualización, retirada de la copia anterior, editor distinto, versión repetida, paquete alterado, editor revocado |
+| Rollback de plugins | Nuevo: intercambia la versión activa con la anterior; exige plugin deshabilitado y copia verificada | `plugins/manager.py` (`rollback`) | `test_plugins_ciclo.py`: intercambio ida y vuelta, copia alterada o ausente, sin versión anterior, deshabilitado. `test_versioning.py` sigue probando solo el núcleo |
+| Cuarentena | Nuevo: por versión, bloquea la habilitación, deshabilita los dependientes habilitados y se libera con confirmación y reautenticación | `plugins/manager.py` (`quarantine`, `release_quarantine`) | `test_plugins_ciclo.py`: bloqueo, cascada, liberación, reversión que no evade la cuarentena; `test_migracion_11.py` |
 | Ejecución de plugins | Pendiente: sin modelo de aislamiento ni autorización. Ningún código de plugin se ejecuta | — | — |
 
 ## D. Seguridad y autenticación
@@ -80,10 +81,11 @@ marcados con «nuevo».
 | Requisito | Estado | Archivos | Pruebas |
 |---|---|---|---|
 | Mejora de la terminal existente | Nuevo: opciones 20 a 28 | `interfaces/terminal/app.py`, `console.py`, `operaciones.py` | `test_terminal_etapa4.py` (10) |
+| Estado y cambios de plugins desde la terminal | Nuevo: opciones 29 a 33 (estado, cuarentena, liberación, actualización y reversión) | `interfaces/terminal/operaciones_plugins.py`, `app.py` | `test_terminal_plugins.py` (8) |
 | Menús y comandos organizados | Nuevo: acciones por áreas en `operaciones.py`; tipos compartidos en `console.py` | `interfaces/terminal/` | `test_terminal.py` (9), `test_terminal_modules.py` (2) |
 | Mensajes de error claros | Nuevo para las opciones nuevas | `interfaces/terminal/operaciones.py` | `test_terminal_etapa4.py`: sobrescritura no válida, reautenticación requerida |
 | Estado del núcleo, cuentas, empresas, permisos | Existente | `interfaces/terminal/app.py` | `test_companies.py` (16), `test_security.py` |
-| Gestión de módulos y plugins desde la terminal | Parcial: módulos sí; plugins no | `interfaces/terminal/app.py` | `test_terminal_modules.py` |
+| Gestión de módulos y plugins desde la terminal | Parcial: módulos y, desde esta etapa, estado, cuarentena, actualización y reversión de plugins. Instalación y habilitación de plugins desde la terminal: pendiente | `interfaces/terminal/app.py` | `test_terminal_modules.py`, `test_terminal_plugins.py` |
 | Preparación para una interfaz de escritorio | Nuevo, sin simular que existe: los servicios devuelven datos planos sin tipos de subsistema | `interfaces/` | `test_arquitectura.py` |
 | Interfaz de escritorio | Pendiente (fase 10) | — | — |
 
@@ -110,7 +112,7 @@ marcados con «nuevo».
 | Sesiones y expiración | `test_security.py` (inactividad, absoluta, reautenticación, sesión caducada) |
 | Plugins inválidos y firmas incorrectas | `test_plugin_package.py`, `test_ed25519.py` |
 | Dependencias circulares | `test_modules.py`, `test_security_and_graph.py`, `test_arquitectura.py` |
-| Rollback | `test_versioning.py` (núcleo), `test_migrations_stage2.py` y `test_migraciones_etapa4.py` (migraciones) |
+| Rollback | `test_versioning.py` (núcleo), `test_migrations_stage2.py` y `test_migraciones_etapa4.py` (migraciones), `test_plugins_ciclo.py` (versiones de plugins) |
 | Exportación de informes | `test_informes.py` |
 | Rutas con espacios y caracteres especiales | `test_auditoria_motor.py::test_documents_in_folders_with_spaces_and_special_characters_are_read`; `test_auditoria_servicio.py` (carpeta y raíz del proyecto con espacios); `test_informes.py` (raíz con Unicode); `test_terminal_etapa4.py` (ruta entre comillas); `test_lanzador.py` (rutas literales) |
 | Las pruebas no modifican datos reales | `test_aislamiento_pruebas.py`; todas las pruebas usan `tmp_path` |

@@ -144,6 +144,22 @@ código 0. Con un `main.py` ausente, debe mostrar «no se encuentra main.py» y 
    y el archivo debe seguir ahí.
 4. Abra los cuatro informes y compruebe que se leen bien en Windows.
 
+**4.8 Plugins (opciones 29 a 33).** Pendiente de ejecución en Windows. La terminal no instala plugins
+todavía: instale antes un paquete firmado con la API. Con una cuenta de plataforma administradora:
+
+1. Consulte el estado (opción 29). El plugin debe aparecer deshabilitado, con su editor.
+2. Ponga el plugin en cuarentena (opción 30) con un motivo. No debe pedir confirmación.
+3. Intente liberar la cuarentena (opción 31) sin reautenticar. Debe rechazarse con «operación
+   crítica: reautentique la sesión», y la cuarentena debe seguir.
+4. Reautentique (opción 17), libere la cuarentena (opción 31) y responda «sí».
+5. Actualice desde una carpeta con espacios y acentos, con la ruta entre comillas (opción 32), usando
+   un paquete de versión mayor firmado por el mismo editor. El plugin debe quedar deshabilitado y con
+   la versión anterior conservada.
+6. Revierta (opción 33) respondiendo «no»: no debe cambiar nada. Repita respondiendo «sí»: debe volver
+   a la versión anterior.
+7. Anote si la copia retirada se borra de `storage\plugins\store\`. Si un programa tiene abierto un archivo de la
+   copia, aplique el caso 5.4 y anote el mensaje exacto.
+
 ## 5. Específico de Windows
 
 **5.1 Bloqueo de archivos.** Abra `config\app.json` en el Bloc de notas mientras la plataforma

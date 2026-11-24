@@ -41,7 +41,7 @@ aparece en el documento maestro.
 | 12 | Mantenimiento, actualizaciones y recuperación: diagnóstico, limpieza de temporales y comprobación de migraciones (etapa 4). Restauración desde la terminal y actualizaciones pendientes | PARCIAL |
 | 13 | Pruebas integrales y distribución | PENDIENTE |
 
-Pruebas automatizadas de la etapa 3: 325 casos. Rama de la etapa 4: 457 recogidas, 456 aprobadas, 0 fallidas y 1 omitida (lanzador sin PowerShell), de ellas 132 nuevas (`docs/MATRIZ_ETAPA_4.md`). Desglose de la etapa 3: 279 de las etapas 1 y 2 y de la auditoría posterior
+Pruebas automatizadas de la etapa 3: 325 casos. Rama de la etapa 4: 498 recogidas, 497 aprobadas, 0 fallidas y 1 omitida (lanzador sin PowerShell), de ellas 173 nuevas (`docs/MATRIZ_ETAPA_4.md`). Desglose de la etapa 3: 279 de las etapas 1 y 2 y de la auditoría posterior
 (214 de la etapa 1, de las que 4 cambiaron de procedimiento o de expectativa; 48 de la etapa 2;
 17 de la auditoría posterior, en `tests/test_auditoria_postimplementacion.py`); 18 de editores de
 confianza (P-05); 5 de dependencias (P-17); 7 de caracterización del kernel; 16 de arquitectura.
@@ -163,7 +163,7 @@ Windows no está verificado (ver `docs/PRUEBAS_WINDOWS.md`).
 - **Instalador.** Código de 128 bits, guardado solo como hash PBKDF2, válido 30 minutos y con cinco
   intentos fallidos como máximo. Un solo uso. Al completarse, la instalación queda cerrada por un
   disparador. Mientras no se completa, no se pueden crear cuentas.
-- **Bus de eventos.** Catálogo cerrado de 39 tipos (35 en la etapa 3 y cuatro nuevos en la etapa 4), cada uno con sus claves obligatorias y
+- **Bus de eventos.** Catálogo cerrado de 43 tipos (35 en la etapa 3 y ocho nuevos en la etapa 4), cada uno con sus claves obligatorias y
   opcionales. Outbox transaccional: el evento se guarda en la misma transacción que el cambio y se
   entrega tras confirmarla. Consumidores idempotentes con registro de entregas, reintentos, cola de
   fallidos y reenvío al arrancar. La auditoría es un consumidor más.
@@ -254,6 +254,7 @@ fusionada en `main`. Funcionalidades, archivos y pruebas: `docs/MATRIZ_ETAPA_4.m
 | 4 | `e8a47a4` | Terminal: opciones 20 a 28 |
 | 5 | `cd546a3` | Lanzador de Windows |
 | 6 | último commit de la rama | Documentación y matriz |
+| 7 | último commit de la rama | Plugins: cuarentena, actualización y reversión (migración 11); terminal 29 a 33; `docs/PLUGINS_CICLO.md` |
 
 Verificado en Linux:
 
@@ -267,7 +268,12 @@ Verificado en Linux:
 - **Migración 10.** Desde base nueva, desde la versión 9 con datos, reversión sin perder datos
   anteriores, interrupción sin tablas parciales y comprobación de la versión de SQLite antes de
   revertir migraciones que usan `DROP COLUMN`.
-- **Terminal.** Opciones 20 a 28. Las operaciones con guardián no se envuelven dos veces.
+- **Terminal.** Opciones 20 a 33. Las operaciones con guardián no se envuelven dos veces.
+- **Plugins (fase 6).** Cuarentena por versión que bloquea la habilitación, actualización a una versión
+  nueva del mismo editor con una versión anterior conservada, y reversión que intercambia ambas
+  versiones. Migración 11, reversible. Pruebas en `tests/test_plugins_ciclo.py`,
+  `tests/test_terminal_plugins.py` y `tests/test_migracion_11.py`. Detalle en `docs/PLUGINS_CICLO.md`.
+  No se ejecuta ningún plugin.
 - **Lanzador.** Revisado y reescrito. Solo hay pruebas estáticas: no se ha ejecutado en Windows.
 
 Cambios deliberados en pruebas existentes: `tests/test_storage.py`, `tests/test_migrations_stage2.py`
@@ -275,12 +281,12 @@ y `tests/test_kernel_characterization.py` esperan ahora la migración 10 y los t
 Son cambios de expectativa, no ocultaciones.
 
 Corrección de documentación: esta sección decía 34 eventos. El catálogo de la etapa 3 tenía 35 tipos,
-y la etapa 4 añade cuatro: 39 en total.
+y la etapa 4 añade ocho (cuatro de auditoría, informes y mantenimiento, y cuatro de plugins): 43 en total.
 
 Pendiente:
 
 - Pruebas activas de auditoría (TLS, HTTP, formularios). Requieren registro de alcance y autorización.
-- Plugins: actualización, rollback y cuarentena no existen. No hay ejecución de plugins.
+- Plugins: instalación y habilitación desde la terminal no existen. No hay ejecución de plugins.
 - Restauración de copias desde la terminal. Existe en la API, con autorización explícita.
 - Verificación criptográfica de la autorización escrita y firma de informes. No hay PDF.
 - Interfaz de escritorio (fase 10).
@@ -293,10 +299,10 @@ Riesgos abiertos:
 - La huella de la configuración demuestra que el contenido no cambió; no demuestra quién lo escribió.
 - P-01 sigue abierto: la API interna del núcleo no pide token.
 
-Verificación final de la rama: 457 pruebas recogidas; 456 aprobadas, 0 fallidas y 1 omitida
+Verificación final de la rama: 498 pruebas recogidas; 497 aprobadas, 0 fallidas y 1 omitida
 (`tests/test_lanzador.py`, análisis sintáctico con PowerShell, no disponible). `ruff check .` sin
-errores; `ruff format --check .` sin cambios pendientes (122 archivos); `mypy --strict src` sin errores
-(78 archivos).
+errores; `ruff format --check .` sin cambios pendientes (131 archivos); `mypy --strict src` sin errores
+(79 archivos).
 
 ## Auditoría posterior a la etapa 2
 

@@ -58,15 +58,16 @@ Versiones probadas, rangos y limitaciones del bloqueo: `docs/DEPENDENCIAS.md`.
 - `docs/INFORMES.md`: formatos de informe, exportación, verificación y eventos.
 - `docs/MANTENIMIENTO.md`: diagnóstico, limpieza de temporales y recuperación ante errores.
 - `docs/MATRIZ_ETAPA_4.md`: funcionalidades, archivos y pruebas de la etapa 4.
+- `docs/PLUGINS_CICLO.md`: cuarentena, actualización y reversión de plugins, permisos, reglas y límites.
 - `docs/CLAUDE_ARCHITECTURE_AUDIT.md`: auditoría de arquitectura y plan de corrección por etapas.
 - `CHANGELOG.md`: historial de cambios.
 
 ## Estado
 
-Implementado: núcleo con ciclo de vida, configuración validada con historial y copias restaurables con autorización, base SQLite con migraciones, auditoría, manifiestos de versión con carga manual, cambio y reversión, módulos declarativos con dependencias habilitables, plugins firmados (editores, catálogo local, revisión y habilitación con dependencias), cuentas con roles y sesiones, permisos temporales, guardián de operaciones críticas y terminal interactiva.
+Implementado: núcleo con ciclo de vida, configuración validada con historial y copias restaurables con autorización, base SQLite con migraciones, auditoría, manifiestos de versión con carga manual, cambio y reversión, módulos declarativos con dependencias habilitables, plugins firmados (editores, catálogo local, revisión, habilitación con dependencias, cuarentena, actualización y reversión), cuentas con roles y sesiones, permisos temporales, guardián de operaciones críticas y terminal interactiva.
 
 Multiempresa: las cuentas pertenecen a una empresa y el ámbito se comprueba en el guardián; faltan aplicaciones y entornos. Instalador con código de un solo uso y bus de eventos con auditoría.
 
-Etapa 4: motor de auditoría sin conexión (17 reglas, perfiles y evaluaciones inmutables), informes JSON, CSV, HTML y TXT con verificación, diagnóstico y limpieza de temporales, y terminal con las opciones 20 a 28.
+Etapa 4: motor de auditoría sin conexión (17 reglas, perfiles y evaluaciones inmutables), informes JSON, CSV, HTML y TXT con verificación, diagnóstico y limpieza de temporales, y terminal con las opciones 20 a 33 (evaluaciones, informes, mantenimiento, reglas y, para plugins, estado, cuarentena, actualización y reversión).
 
-Pendiente: ejecución de módulos y plugins, actualización, rollback y cuarentena de plugins, gestión de plugins y de permisos desde la terminal, restauración de copias desde la terminal, automatización, pruebas activas de auditoría e interfaz de escritorio. No se declaran como disponibles hasta que tengan pruebas.
+Pendiente: ejecución de módulos y plugins, instalación y habilitación de plugins desde la terminal, gestión de permisos desde la terminal, restauración de copias desde la terminal, automatización, pruebas activas de auditoría e interfaz de escritorio. No se declaran como disponibles hasta que tengan pruebas.

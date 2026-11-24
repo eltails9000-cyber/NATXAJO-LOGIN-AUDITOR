@@ -110,6 +110,11 @@ Estos límites vienen del documento maestro y no se relajan:
   enlaces ni toca archivos fuera de esas carpetas. Exige confirmación y reautenticación reciente.
 - **Reversión de migraciones.** Se comprueba la versión de SQLite antes de cambiar nada cuando la
   reversión necesita `DROP COLUMN`.
+- **Plugins.** Cuarentena, actualización y reversión pasan por la puerta de operaciones: sesión,
+  permiso, ámbito de plataforma y, en las acciones críticas, confirmación y reautenticación. La
+  reversión y la actualización verifican la copia del almacén (firma, integridad y versión) antes de
+  cambiar nada. Un editor revocado no puede actualizar ni revertir. Detalle en
+  `docs/PLUGINS_CICLO.md`.
 - **Límites.** No hay pruebas activas, verificación criptográfica de la autorización ni firma de
   informes.
 
@@ -117,8 +122,9 @@ Estos límites vienen del documento maestro y no se relajan:
 
 - **Auditoría activa.** No hay pruebas contra sistemas en ejecución (TLS, cabeceras HTTP, formularios).
   Requieren un registro de alcance y autorización que todavía no existe.
-- **Actualización, rollback y cuarentena de plugins.** No existen. El rollback que sí hay es el de las
-  versiones del núcleo.
+- **Instalación y habilitación de plugins desde la terminal.** No existen: solo se hacen por la API.
+  La cuarentena, la actualización y la reversión sí se pueden hacer desde la terminal (opciones 29 a
+  33).
 - **Aislamiento de módulos.** No hay procesos separados, límites de recursos ni sandbox. Ningún
   módulo se ejecuta todavía, así que los permisos que un módulo declara no se aplican a ningún
   código. Los permisos de las operaciones de la plataforma sí se aplican. Cuando exista ejecución
