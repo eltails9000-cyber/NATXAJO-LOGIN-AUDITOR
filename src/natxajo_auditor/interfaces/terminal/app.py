@@ -22,6 +22,10 @@ from natxajo_auditor.core.contracts import (
     CLEANUP_PERMISSION,
     DIAGNOSTIC_PERMISSION,
     PLATFORM_COMPANY,
+    PLUGIN_QUARANTINE_PERMISSION,
+    PLUGIN_QUARANTINE_RELEASE_PERMISSION,
+    PLUGIN_READ_PERMISSION,
+    PLUGIN_VERSION_PERMISSION,
     REPORT_EXPORT_PERMISSION,
     REPORT_READ_PERMISSION,
     SCOPE_DENIED,
@@ -52,10 +56,17 @@ from natxajo_auditor.interfaces.terminal.operaciones import (
     rules_list,
     run_audit_from_file,
 )
+from natxajo_auditor.interfaces.terminal.operaciones_plugins import (
+    plugin_quarantine,
+    plugin_release,
+    plugin_rollback,
+    plugin_status,
+    plugin_update,
+)
 from natxajo_auditor.kernel.kernel import Kernel
 
 PENDING_FEATURES = (
-    "Gestión de plugins desde la terminal: cuarentena, actualización y rollback (fase 6)",
+    "Instalación, habilitación y desinstalación de plugins desde la terminal (fase 6)",
     "Motor de automatización (fase 8)",
     "Auditoría activa de sistemas (TLS, HTTP, formularios): requiere registro de alcance",
     "Restauración de copias desde la terminal: la operación existe, falta exponerla",
@@ -660,5 +671,50 @@ _OPTIONS: dict[str, Option] = {
             guarded=True,
         ),
         Option("28", "Reglas de auditoría", None, False, rules_list),
+        Option(
+            "29",
+            "Estado de los plugins",
+            PLUGIN_READ_PERMISSION,
+            False,
+            plugin_status,
+            scope=SCOPE_PLATFORM,
+            guarded=True,
+        ),
+        Option(
+            "30",
+            "Poner un plugin en cuarentena",
+            PLUGIN_QUARANTINE_PERMISSION,
+            False,
+            plugin_quarantine,
+            scope=SCOPE_PLATFORM,
+            guarded=True,
+        ),
+        Option(
+            "31",
+            "Liberar la cuarentena de un plugin (confirma)",
+            PLUGIN_QUARANTINE_RELEASE_PERMISSION,
+            True,
+            plugin_release,
+            scope=SCOPE_PLATFORM,
+            guarded=True,
+        ),
+        Option(
+            "32",
+            "Actualizar un plugin desde una carpeta (confirma)",
+            PLUGIN_VERSION_PERMISSION,
+            True,
+            plugin_update,
+            scope=SCOPE_PLATFORM,
+            guarded=True,
+        ),
+        Option(
+            "33",
+            "Revertir un plugin a la versión anterior (confirma)",
+            PLUGIN_VERSION_PERMISSION,
+            True,
+            plugin_rollback,
+            scope=SCOPE_PLATFORM,
+            guarded=True,
+        ),
     )
 }
