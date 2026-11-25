@@ -30,6 +30,10 @@ DOMAIN_SERVICES = (
     "versions",
     "security",
     "plugins",
+    # Etapa 4: se construyen después de la seguridad, porque comparten su guardián.
+    "auditing",
+    "reports",
+    "maintenance",
 )
 ALL_SERVICES = {"database", "outbox", "audit", *DOMAIN_SERVICES}
 

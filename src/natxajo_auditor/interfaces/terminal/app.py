@@ -14,60 +14,71 @@ from __future__ import annotations
 
 import getpass
 import json
-from collections.abc import Callable
-from dataclasses import dataclass
 
-from natxajo_auditor.core.contracts import APPROVE_PERMISSION, PLATFORM_COMPANY, SCOPE_DENIED
+from natxajo_auditor.core.contracts import (
+    APPROVE_PERMISSION,
+    AUDIT_READ_PERMISSION,
+    AUDIT_RUN_PERMISSION,
+    CLEANUP_PERMISSION,
+    DIAGNOSTIC_PERMISSION,
+    PLATFORM_COMPANY,
+    PLUGIN_QUARANTINE_PERMISSION,
+    PLUGIN_QUARANTINE_RELEASE_PERMISSION,
+    PLUGIN_READ_PERMISSION,
+    PLUGIN_VERSION_PERMISSION,
+    REPORT_EXPORT_PERMISSION,
+    REPORT_READ_PERMISSION,
+    SCOPE_DENIED,
+)
 from natxajo_auditor.core.exceptions import (
     AuthorizationError,
     NatxajoError,
     SessionError,
     ValidationError,
 )
+from natxajo_auditor.interfaces.terminal.console import (
+    SCOPE_OWN,
+    SCOPE_PLATFORM,
+    Console,
+    Option,
+    Read,
+    Write,
+    confirm,
+)
+from natxajo_auditor.interfaces.terminal.operaciones import (
+    audit_history,
+    audit_view,
+    maintenance_cleanup,
+    maintenance_diagnostics,
+    report_export,
+    report_history,
+    report_verify,
+    rules_list,
+    run_audit_from_file,
+)
+from natxajo_auditor.interfaces.terminal.operaciones_plugins import (
+    plugin_quarantine,
+    plugin_release,
+    plugin_rollback,
+    plugin_status,
+    plugin_update,
+)
 from natxajo_auditor.kernel.kernel import Kernel
 
 PENDING_FEATURES = (
-    "Gestión de plugins desde la terminal (fase 6)",
+    "Instalación, habilitación y desinstalación de plugins desde la terminal (fase 6)",
     "Motor de automatización (fase 8)",
-    "Motor de auditoría defensiva (fase 9)",
+    "Auditoría activa de sistemas (TLS, HTTP, formularios): requiere registro de alcance",
+    "Restauración de copias desde la terminal: la operación existe, falta exponerla",
     "Interfaz de escritorio (fase 10)",
-    "Diagnósticos, informes y mantenimiento (fases 11 y 12)",
     "Ejecución de módulos y plugins (sin fase asignada)",
 )
 MAX_LOGIN_ATTEMPTS = 3
-CONFIRMATIONS = frozenset({"sí", "si", "s"})
 CREATE_ACCOUNT_PERMISSION = "seguridad:nucleo:cuenta:administrar"
 COMPANY_ADMIN_PERMISSION = "seguridad:nucleo:empresa:administrar"
 COMPANY_READ_PERMISSION = "seguridad:nucleo:empresa:leer"
-SCOPE_NONE = "ninguno"
-SCOPE_OWN = "propia"
-SCOPE_PLATFORM = "plataforma"
 _EXIT = "salir"
 _EXPIRED = "caducada"
-
-Read = Callable[[str], str]
-Write = Callable[[str], None]
-
-
-@dataclass
-class Console:
-    kernel: Kernel
-    read: Read
-    read_secret: Read
-    write: Write
-    token: str = ""
-    username: str = ""
-    company: str = ""
-
-
-@dataclass(frozen=True)
-class Option:
-    key: str
-    label: str
-    permission: str | None
-    critical: bool
-    action: Callable[[Console], None]
-    scope: str = SCOPE_NONE
 
 
 def run_terminal(
@@ -177,7 +188,11 @@ def _dispatch(console: Console, choice: str) -> None:
     if company is not None:
         # Se comprueba antes de pedir confirmación: una denegación no debe pedir nada más.
         security.guard.check_scope(console.token, company, option.permission)
-    if option.critical and not _confirm(console):
+    if option.guarded:
+        # El servicio aplica el guardián y registra la operación: no se envuelve de nuevo.
+        option.action(console)
+        return
+    if option.critical and not confirm(console):
         console.write("Operación cancelada")
         return
     security.guard.run(
@@ -204,11 +219,6 @@ def _visible(console: Console, option: Option) -> bool:
     ):
         return False
     return option.scope != SCOPE_PLATFORM or console.company == PLATFORM_COMPANY
-
-
-def _confirm(console: Console) -> bool:
-    answer = console.read("¿Confirma la operación? (sí/no): ").strip().lower()
-    return answer in CONFIRMATIONS
 
 
 def _show_menu(console: Console) -> None:
@@ -593,6 +603,118 @@ _OPTIONS: dict[str, Option] = {
             False,
             _list_companies,
             scope=SCOPE_PLATFORM,
+        ),
+        Option(
+            "20",
+            "Evaluar un archivo de configuración",
+            AUDIT_RUN_PERMISSION,
+            False,
+            run_audit_from_file,
+            guarded=True,
+        ),
+        Option(
+            "21",
+            "Historial de evaluaciones",
+            AUDIT_READ_PERMISSION,
+            False,
+            audit_history,
+            guarded=True,
+        ),
+        Option(
+            "22",
+            "Ver una evaluación y sus hallazgos",
+            AUDIT_READ_PERMISSION,
+            False,
+            audit_view,
+            guarded=True,
+        ),
+        Option(
+            "23",
+            "Exportar un informe de una evaluación",
+            REPORT_EXPORT_PERMISSION,
+            False,
+            report_export,
+            guarded=True,
+        ),
+        Option(
+            "24",
+            "Historial de informes exportados",
+            REPORT_READ_PERMISSION,
+            False,
+            report_history,
+            guarded=True,
+        ),
+        Option(
+            "25",
+            "Verificar informes exportados",
+            REPORT_READ_PERMISSION,
+            False,
+            report_verify,
+            guarded=True,
+        ),
+        Option(
+            "26",
+            "Diagnóstico general de la plataforma",
+            DIAGNOSTIC_PERMISSION,
+            False,
+            maintenance_diagnostics,
+            scope=SCOPE_PLATFORM,
+            guarded=True,
+        ),
+        Option(
+            "27",
+            "Limpiar temporales antiguos (muestra el plan antes)",
+            CLEANUP_PERMISSION,
+            False,
+            maintenance_cleanup,
+            scope=SCOPE_PLATFORM,
+            guarded=True,
+        ),
+        Option("28", "Reglas de auditoría", None, False, rules_list),
+        Option(
+            "29",
+            "Estado de los plugins",
+            PLUGIN_READ_PERMISSION,
+            False,
+            plugin_status,
+            scope=SCOPE_PLATFORM,
+            guarded=True,
+        ),
+        Option(
+            "30",
+            "Poner un plugin en cuarentena",
+            PLUGIN_QUARANTINE_PERMISSION,
+            False,
+            plugin_quarantine,
+            scope=SCOPE_PLATFORM,
+            guarded=True,
+        ),
+        Option(
+            "31",
+            "Liberar la cuarentena de un plugin (confirma)",
+            PLUGIN_QUARANTINE_RELEASE_PERMISSION,
+            True,
+            plugin_release,
+            scope=SCOPE_PLATFORM,
+            guarded=True,
+        ),
+        Option(
+            "32",
+            "Actualizar un plugin desde una carpeta (confirma)",
+            PLUGIN_VERSION_PERMISSION,
+            True,
+            plugin_update,
+            scope=SCOPE_PLATFORM,
+            guarded=True,
+        ),
+        Option(
+            "33",
+            "Revertir un plugin a la versión anterior (confirma)",
+            PLUGIN_VERSION_PERMISSION,
+            True,
+            plugin_rollback,
+            scope=SCOPE_PLATFORM,
+            guarded=True,
         ),
     )
 }

@@ -22,9 +22,9 @@ def _applied(database: Database) -> list[int]:
 
 
 def test_migrations_apply_once(database: Database) -> None:
-    assert apply_migrations(database) == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert apply_migrations(database) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     assert apply_migrations(database) == []
-    assert _applied(database) == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert _applied(database) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
 
 def test_failed_migration_leaves_no_partial_changes(database: Database) -> None:

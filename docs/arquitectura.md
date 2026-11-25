@@ -3,7 +3,8 @@
 ## Capas y reglas de dependencia
 
 ```
-interfaces  ──►  kernel  ──►  security, configuration, storage, versioning, modules, plugins  ──►  core
+interfaces  ──►  kernel  ──►  security, configuration, storage, versioning, modules, plugins,
+                             auditing, reporting, maintenance  ──►  core
 ```
 
 - `core` no depende de nada del proyecto. Contiene excepciones y utilidades.
@@ -18,6 +19,9 @@ interfaces  ──►  kernel  ──►  security, configuration, storage, vers
 - `modules` y `plugins` solo importan `core` y `storage`. Consumen contratos públicos de `core`.
 - `interfaces` solo consume servicios del núcleo. No importa `security` ni `storage`. No contiene
   reglas de negocio.
+- La interfaz gráfica vive en `interfaces/gui/`. Sus módulos importan solo `core`, `kernel` y
+  otros módulos de `gui` por su ruta completa. Ningún módulo importa el paquete `gui` en sí:
+  su `__init__` importa `server`, y esa importación crearía un ciclo.
 
 ## Reglas de dependencia
 
@@ -34,7 +38,10 @@ hace fallar la suite, y también los ciclos y la importación relativa.
 | `security` | `core`, `storage` |
 | `modules` | `core`, `storage` |
 | `plugins` | `core`, `storage` |
-| `kernel` | `core`, `configuration`, `modules`, `plugins`, `security`, `storage`, `versioning` |
+| `auditing` | `core`, `storage` |
+| `reporting` | `auditing`, `core`, `storage` |
+| `maintenance` | `core`, `storage` |
+| `kernel` | `auditing`, `configuration`, `core`, `maintenance`, `modules`, `plugins`, `reporting`, `security`, `storage`, `versioning` |
 | `interfaces` | `core`, `kernel` |
 | `(raiz)` | `core`, `kernel`, `interfaces` |
 

@@ -2,6 +2,53 @@
 
 ## [Sin publicar]
 
+- Interfaz gráfica local (`python main.py --gui`): panel, auditoría, usuarios, sesiones,
+  plugins, módulos, reportes, eventos, seguridad, mantenimiento y configuración. Servidor en
+  127.0.0.1 con biblioteca estándar, sin CDN ni dependencias nuevas. Operaciones existentes
+  con su guardián, confirmación y reautenticación. Preferencias en `config/interfaz.json`.
+  Detalle en `docs/INTERFAZ_GRAFICA.md`.
+  - Sesiones: listado de solo lectura sin fichas ni huellas (`SessionStore.list_live`).
+  - Límite de sesiones simultáneas: error propio (`SessionLimitError`), distinguible de las
+    credenciales incorrectas.
+  - Empaquetado: `static/*` incluido en el paquete.
+- Etapa 4: motor de auditoría sin conexión, informes, mantenimiento y terminal (rama
+  `etapa-4-auditoria-informes-mantenimiento`).
+  - Motor (`auditing/`): 17 reglas de autenticación configurables dentro de límites fijos, perfiles
+    `completo` y `critico`, huella canónica de la configuración, validación de resultados y
+    evaluaciones inmutables. Migración 10, reversible.
+  - Informes (`reporting/`): JSON, CSV, HTML y TXT. Exportación atómica registrada en la misma
+    transacción, verificación de cinco estados y evento de fallo con motivo recortado.
+  - Mantenimiento (`maintenance/`): diagnóstico de ocho comprobaciones y limpieza de temporales
+    `*.tmp` con plan previo, confirmación y reautenticación. Nunca sigue enlaces.
+  - Plugins (fase 6): cuarentena por versión, actualización a una versión nueva del mismo editor y
+    reversión a la versión anterior. Sin ejecución de plugins. Migración 11, reversible, con
+    `plugin_quarantine` y `plugin_history`. Detalle en `docs/PLUGINS_CICLO.md`.
+    - Cuarentena: bloquea la habilitación, deshabilita los dependientes habilitados y se libera con
+      confirmación y reautenticación.
+    - Actualización: exige plugin deshabilitado, versión estrictamente mayor, mismo editor y copia
+      verificada. Conserva una versión anterior; la siguiente actualización retira la anterior.
+    - Reversión: intercambia la versión activa con la anterior. Verifica la copia antes de cambiar.
+    - Permisos nuevos: `plugins:nucleo:estado:leer`, `plugins:nucleo:cuarentena:escribir`,
+      `plugins:nucleo:cuarentena:administrar` (crítico) y `plugins:nucleo:version:administrar`
+      (crítico).
+    - Pruebas: 32 en `test_plugins_ciclo.py`, 8 en `test_terminal_plugins.py` y 1 en
+      `test_migracion_11.py`.
+  - Terminal: opciones 20 a 33. Tipos compartidos en `console.py` y acciones por áreas en
+    `operaciones.py` y `operaciones_plugins.py`. Las operaciones con guardián no se registran dos
+    veces.
+  - Eventos: `audit.run_recorded`, `report.exported`, `report.failed`, `maintenance.cleanup_applied`,
+    `plugin.quarantined`, `plugin.quarantine_released`, `plugin.updated` y `plugin.rolled_back`. El
+    catálogo pasa de 35 a 43 tipos.
+  - Permisos nuevos: auditoría (evaluar y leer), informes (exportar y leer), diagnóstico y limpieza
+    (solo plataforma; la limpieza es crítica).
+  - Lanzador: detecta Python 3.11 real, ignora los alias de la Microsoft Store, comprueba `main.py`
+    y da errores claros. Escrito con BOM UTF-8. No se ha ejecutado en Windows.
+  - Cambios de expectativa en pruebas existentes: la migración 10 y los tres servicios nuevos en
+    `test_storage.py`, `test_migrations_stage2.py` y `test_kernel_characterization.py`.
+  - Pendiente: pruebas activas de auditoría, instalación y habilitación de plugins desde la terminal,
+    restauración desde la terminal, ejecución de plugins e interfaz de escritorio.
+  - Pruebas: 498 recogidas, 497 aprobadas, 0 fallidas y 1 omitida (lanzador sin PowerShell).
+
 - Etapa 3, fase A (P-05): editores de confianza protegidos en el servicio y en la base.
   - Dar de alta (`register_publisher`), revocar (`revoke_publisher`) y revisar un plugin de
     terceros (`record_review`) exigen sesión, un permiso crítico, ámbito de plataforma,

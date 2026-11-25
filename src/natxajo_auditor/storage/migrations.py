@@ -364,6 +364,146 @@ MIGRATIONS: tuple[Migration, ...] = (
             "DROP TRIGGER plugin_publishers_key_is_immutable",
         ),
     ),
+    Migration(
+        version=10,
+        name="evaluaciones_e_informes",
+        statements=(
+            """
+            CREATE TABLE audit_runs (
+                id TEXT PRIMARY KEY CHECK (length(id) = 36),
+                company_id TEXT NOT NULL REFERENCES companies(id),
+                username TEXT NOT NULL,
+                profile TEXT NOT NULL CHECK (length(profile) BETWEEN 1 AND 40),
+                overrides TEXT NOT NULL,
+                authorization_reference TEXT NOT NULL
+                    CHECK (length(authorization_reference) BETWEEN 3 AND 200),
+                snapshot_sha256 TEXT NOT NULL CHECK (length(snapshot_sha256) = 64),
+                engine_version TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                finished_at TEXT NOT NULL,
+                passed INTEGER NOT NULL CHECK (passed >= 0),
+                failed INTEGER NOT NULL CHECK (failed >= 0),
+                not_evaluable INTEGER NOT NULL CHECK (not_evaluable >= 0),
+                risk TEXT NOT NULL
+                    CHECK (risk IN ('ninguno', 'bajo', 'medio', 'alto', 'critico'))
+            )
+            """,
+            """
+            CREATE TABLE audit_findings (
+                run_id TEXT NOT NULL REFERENCES audit_runs(id),
+                rule_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                path TEXT NOT NULL,
+                status TEXT NOT NULL
+                    CHECK (status IN ('cumple', 'no_cumple', 'no_evaluable')),
+                severity TEXT NOT NULL CHECK (severity IN ('bajo', 'medio', 'alto', 'critico')),
+                observed TEXT,
+                expected TEXT NOT NULL,
+                recommendation TEXT NOT NULL,
+                PRIMARY KEY (run_id, rule_id)
+            )
+            """,
+            """
+            CREATE TRIGGER audit_runs_are_immutable
+            BEFORE UPDATE ON audit_runs
+            BEGIN
+                SELECT RAISE(ABORT, 'una evaluación no se modifica');
+            END
+            """,
+            """
+            CREATE TRIGGER audit_runs_cannot_be_deleted
+            BEFORE DELETE ON audit_runs
+            BEGIN
+                SELECT RAISE(ABORT, 'una evaluación no se elimina');
+            END
+            """,
+            """
+            CREATE TRIGGER audit_findings_are_immutable
+            BEFORE UPDATE ON audit_findings
+            BEGIN
+                SELECT RAISE(ABORT, 'los hallazgos no se modifican');
+            END
+            """,
+            """
+            CREATE TRIGGER audit_findings_cannot_be_deleted
+            BEFORE DELETE ON audit_findings
+            BEGIN
+                SELECT RAISE(ABORT, 'los hallazgos no se eliminan');
+            END
+            """,
+            """
+            CREATE TABLE report_exports (
+                id TEXT PRIMARY KEY CHECK (length(id) = 36),
+                run_id TEXT NOT NULL REFERENCES audit_runs(id),
+                company_id TEXT NOT NULL REFERENCES companies(id),
+                format TEXT NOT NULL CHECK (format IN ('json', 'csv', 'html', 'txt')),
+                username TEXT NOT NULL,
+                relative_path TEXT NOT NULL,
+                sha256 TEXT NOT NULL CHECK (length(sha256) = 64),
+                size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TRIGGER report_exports_are_immutable
+            BEFORE UPDATE ON report_exports
+            BEGIN
+                SELECT RAISE(ABORT, 'un informe exportado no se modifica');
+            END
+            """,
+            """
+            CREATE TRIGGER report_exports_cannot_be_deleted
+            BEFORE DELETE ON report_exports
+            BEGIN
+                SELECT RAISE(ABORT, 'un informe exportado no se elimina');
+            END
+            """,
+        ),
+        down=(
+            "DROP TRIGGER report_exports_cannot_be_deleted",
+            "DROP TRIGGER report_exports_are_immutable",
+            "DROP TABLE report_exports",
+            "DROP TRIGGER audit_findings_cannot_be_deleted",
+            "DROP TRIGGER audit_findings_are_immutable",
+            "DROP TABLE audit_findings",
+            "DROP TRIGGER audit_runs_cannot_be_deleted",
+            "DROP TRIGGER audit_runs_are_immutable",
+            "DROP TABLE audit_runs",
+        ),
+    ),
+    Migration(
+        version=11,
+        name="cuarentena_y_version_anterior_de_plugins",
+        statements=(
+            # Un plugin en cuarentena no puede habilitarse. La clave incluye la versión: liberar
+            # o actualizar no afecta a una cuarentena de otra versión.
+            """
+            CREATE TABLE plugin_quarantine (
+                plugin_id TEXT NOT NULL,
+                version TEXT NOT NULL,
+                reason TEXT NOT NULL CHECK (length(reason) BETWEEN 1 AND 200),
+                username TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (plugin_id, version)
+            )
+            """,
+            # Una sola versión anterior por plugin: la que se restaura al revertir.
+            """
+            CREATE TABLE plugin_history (
+                plugin_id TEXT PRIMARY KEY,
+                version TEXT NOT NULL,
+                publisher_key_id TEXT NOT NULL REFERENCES plugin_publishers (key_id),
+                integrity_sha256 TEXT NOT NULL CHECK (length(integrity_sha256) = 64),
+                dependencies TEXT NOT NULL,
+                retired_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+        ),
+        down=(
+            "DROP TABLE plugin_history",
+            "DROP TABLE plugin_quarantine",
+        ),
+    ),
 )
 
 _BOOKKEEPING = (
@@ -442,6 +582,13 @@ def rollback_migrations(
             raise StorageError(f"no se puede revertir la migración desconocida {version}")
         if not migration.down:
             raise StorageError(f"la migración {version} ({migration.name}) no es reversible")
+        if _needs_drop_column(migration) and sqlite3.sqlite_version_info < MIN_SQLITE_DROP_COLUMN:
+            # Se comprueba antes de cambiar nada: una reversión a medias sería peor que no empezar.
+            raise StorageError(
+                f"la migración {version} ({migration.name}) necesita SQLite "
+                f"{_format_version(MIN_SQLITE_DROP_COLUMN)} o posterior para DROP COLUMN; "
+                f"este intérprete usa SQLite {_format_version(sqlite3.sqlite_version_info)}"
+            )
     for version in to_revert:
         migration = known[version]
         try:
@@ -452,6 +599,18 @@ def rollback_migrations(
         except sqlite3.Error as exc:
             raise StorageError(f"Falló la reversión de la migración {version}: {exc}") from exc
     return to_revert
+
+
+# DROP COLUMN existe desde SQLite 3.35.0. Revertir una migración que lo usa exige esa versión.
+MIN_SQLITE_DROP_COLUMN: tuple[int, int, int] = (3, 35, 0)
+
+
+def _needs_drop_column(migration: Migration) -> bool:
+    return any("DROP COLUMN" in statement.upper() for statement in migration.down)
+
+
+def _format_version(version: tuple[int, ...]) -> str:
+    return ".".join(str(part) for part in version)
 
 
 def _check_definitions(migrations: tuple[Migration, ...]) -> None:

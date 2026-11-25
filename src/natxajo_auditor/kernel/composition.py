@@ -20,12 +20,15 @@ de operaciones. El núcleo registra `kernel.started` solo después de llamar a `
 
 from __future__ import annotations
 
+from natxajo_auditor.auditing.service import AuditingService
 from natxajo_auditor.configuration.manager import ConfigurationManager
 from natxajo_auditor.core.utilities import Clock, utc_stamp
 from natxajo_auditor.kernel.context import RuntimeContext
 from natxajo_auditor.kernel.service_container import ServiceContainer, ServiceKey
+from natxajo_auditor.maintenance.service import MaintenanceService
 from natxajo_auditor.modules.manager import ModuleManager
 from natxajo_auditor.plugins.manager import PluginManager
+from natxajo_auditor.reporting.service import ReportService
 from natxajo_auditor.security.passwords import DEFAULT_ITERATIONS, MIN_ITERATIONS
 from natxajo_auditor.security.service import SecurityService
 from natxajo_auditor.storage.audit import AuditConsumer, AuditLog
@@ -48,6 +51,9 @@ SERVICE_MODULES = "modules"
 SERVICE_VERSIONS = "versions"
 SERVICE_PLUGINS = "plugins"
 SERVICE_SECURITY = "security"
+SERVICE_AUDITING = "auditing"
+SERVICE_REPORTS = "reports"
+SERVICE_MAINTENANCE = "maintenance"
 MIGRATION_COPIES_DIR = "migraciones"
 
 DATABASE: ServiceKey[Database] = ServiceKey(SERVICE_DATABASE, Database)
@@ -61,6 +67,9 @@ MODULES: ServiceKey[ModuleManager] = ServiceKey(SERVICE_MODULES, ModuleManager)
 VERSIONS: ServiceKey[VersionManager] = ServiceKey(SERVICE_VERSIONS, VersionManager)
 SECURITY: ServiceKey[SecurityService] = ServiceKey(SERVICE_SECURITY, SecurityService)
 PLUGINS: ServiceKey[PluginManager] = ServiceKey(SERVICE_PLUGINS, PluginManager)
+AUDITING: ServiceKey[AuditingService] = ServiceKey(SERVICE_AUDITING, AuditingService)
+REPORTS: ServiceKey[ReportService] = ServiceKey(SERVICE_REPORTS, ReportService)
+MAINTENANCE: ServiceKey[MaintenanceService] = ServiceKey(SERVICE_MAINTENANCE, MaintenanceService)
 
 
 def compose(
@@ -96,7 +105,8 @@ def compose(
     outbox.dispatch_pending()
 
     services.put(CONFIGURATION, ConfigurationManager(context.config_dir))
-    services.put(BACKUPS, BackupManager(context.storage_dir / "backups"))
+    backups = BackupManager(context.storage_dir / "backups")
+    services.put(BACKUPS, backups)
     modules = ModuleManager(context.modules_dir, database, audit)
     services.put(MODULES, modules)
     services.put(
@@ -124,5 +134,39 @@ def compose(
             audit=audit,
             kernel_version=kernel_version,
             gate=security.guard,
+        ),
+    )
+    # Etapa 4: auditoría, informes y mantenimiento. Todos reciben el mismo guardián.
+    services.put(
+        AUDITING,
+        AuditingService(
+            database=database,
+            audit=audit,
+            gate=security.guard,
+            clock=clock,
+            engine_version=kernel_version,
+        ),
+    )
+    services.put(
+        REPORTS,
+        ReportService(
+            database=database,
+            audit=audit,
+            gate=security.guard,
+            clock=clock,
+            reports_dir=context.reports_dir,
+            platform_version=kernel_version,
+        ),
+    )
+    services.put(
+        MAINTENANCE,
+        MaintenanceService(
+            database=database,
+            outbox=outbox,
+            backups=backups,
+            audit=audit,
+            gate=security.guard,
+            clock=clock,
+            managed_dirs=(context.config_dir, context.storage_dir, context.reports_dir),
         ),
     )

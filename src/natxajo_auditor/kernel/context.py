@@ -27,6 +27,11 @@ class RuntimeContext:
         return self.project_root / "modules"
 
     @property
+    def reports_dir(self) -> Path:
+        """Informes exportados, en una carpeta por empresa. Nunca se versiona."""
+        return self.project_root / "reports"
+
+    @property
     def plugins_dir(self) -> Path:
         """Datos de plugins: copias almacenadas y área de trabajo para verificar paquetes."""
         return self.storage_dir / "plugins"

@@ -16,6 +16,29 @@ PLATFORM_COMPANY = "plataforma"
 SCOPE_DENIED = "la operación pertenece a otra empresa"
 APPROVE_PERMISSION = "seguridad:nucleo:permiso:aprobar"
 
+# Permisos de la etapa 4. La terminal y los servicios los comparten: se definen una sola vez.
+AUDIT_READ_PERMISSION = "auditoria:nucleo:evaluacion:leer"
+AUDIT_RUN_PERMISSION = "auditoria:nucleo:evaluacion:ejecutar"
+REPORT_READ_PERMISSION = "informes:nucleo:exportacion:leer"
+REPORT_EXPORT_PERMISSION = "informes:nucleo:exportacion:escribir"
+DIAGNOSTIC_PERMISSION = "mantenimiento:nucleo:diagnostico:leer"
+CLEANUP_PERMISSION = "mantenimiento:nucleo:limpieza:ejecutar"
+
+# Plugins: estado (lectura), cuarentena (escribir, no crítica: es una medida defensiva), liberar
+# la cuarentena y cambiar de versión (ambas críticas: cambian qué código puede habilitarse).
+PLUGIN_READ_PERMISSION = "plugins:nucleo:estado:leer"
+PLUGIN_QUARANTINE_PERMISSION = "plugins:nucleo:cuarentena:escribir"
+PLUGIN_QUARANTINE_RELEASE_PERMISSION = "plugins:nucleo:cuarentena:administrar"
+PLUGIN_VERSION_PERMISSION = "plugins:nucleo:version:administrar"
+
+# Lectura de pantallas de la interfaz gráfica. Cada consulta pasa por el guardián.
+EVENT_READ_PERMISSION = "auditoria:nucleo:evento:leer"
+ACCOUNT_READ_PERMISSION = "seguridad:nucleo:cuenta:leer"
+SESSION_READ_PERMISSION = "seguridad:nucleo:sesion:leer"
+COMPANY_READ_PERMISSION = "seguridad:nucleo:empresa:leer"
+MODULE_READ_PERMISSION = "modulos:nucleo:modulo:leer"
+MODULE_EXECUTE_PERMISSION = "modulos:nucleo:modulo:ejecutar"
+
 T = TypeVar("T")
 
 
