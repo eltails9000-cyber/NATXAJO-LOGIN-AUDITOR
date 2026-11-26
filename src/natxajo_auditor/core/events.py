@@ -70,6 +70,7 @@ CATALOG: Mapping[str, EventSpec] = {
     "session.closed": _spec(_SEC, "username"),
     "session.closed_all": _spec(_SEC, "username"),
     "session.reauthenticated": _spec(_SEC, "username"),
+    "session.limit_reached": _spec(_SEC, "username"),
     "grant.requested": _spec(_SEC, "grant username permission"),
     "grant.approved": _spec(_SEC, "grant approver permission"),
     "grant.rejected": _spec(_SEC, "grant actor"),

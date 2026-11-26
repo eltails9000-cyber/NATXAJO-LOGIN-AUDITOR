@@ -29,7 +29,6 @@ from natxajo_auditor.core.exceptions import (
     AuthorizationError,
     NatxajoError,
     SessionError,
-    SessionLimitError,
 )
 from natxajo_auditor.interfaces.gui.actions import Actions
 from natxajo_auditor.interfaces.gui.http_security import (
@@ -78,7 +77,12 @@ from natxajo_auditor.kernel.kernel import Kernel
 
 LOG = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+# Sesiones autenticadas de la interfaz a la vez. Al llegar al límite se rechazan nuevos inicios.
 WEB_SESSION_LIMIT = 64
+# Visitantes sin acceso a la vez. Su pool es aparte y nunca desplaza una sesión autenticada.
+ANONYMOUS_SESSION_LIMIT = 256
+# Todo fallo de acceso responde igual: usuario inexistente, contraseña errónea, cuenta bloqueada o
+# deshabilitada, y también el límite de sesiones de la cuenta.
 CREDENTIALS_MESSAGE = "Usuario o contraseña incorrectos."
 REPORT_FORMATS = ("json", "csv", "html", "txt")
 DEFAULT_EVENT_LIMIT = 200
@@ -239,21 +243,48 @@ class GuiApp:
 
     # --- sesiones web -----------------------------------------------------------------------
 
+    # Hay dos grupos de sesiones web con límites separados:
+    # - Visitantes (sin ficha de la plataforma): solo llevan la ficha CSRF del formulario. Su pool
+    #   tiene un límite; al llenarse se descarta el visitante más antiguo. Nunca se toca una sesión
+    #   autenticada, y descartar un visitante no cierra ninguna sesión de la plataforma.
+    # - Sesiones autenticadas: llevan la ficha de la plataforma. No se descarta ninguna: al llegar
+    #   al límite se rechazan los inicios nuevos, sin verificar la contraseña.
+
     def _web_session(self, request: Request) -> WebSession:
         sid = read_cookie(request, SESSION_COOKIE)
         if sid is not None and sid in self._sessions:
             return self._sessions[sid]
-        return self._new_web()
+        return self._new_visitor()
 
-    def _new_web(self) -> WebSession:
-        if len(self._sessions) >= WEB_SESSION_LIMIT:
-            oldest = next(iter(self._sessions))
-            evicted = self._sessions.pop(oldest)
-            if evicted.token is not None:
-                self._kernel.security.logout(evicted.token)
-        web = WebSession(sid=new_secret(), csrf=new_secret())
+    def _new_visitor(self) -> WebSession:
+        visitors = [sid for sid, web in self._sessions.items() if web.token is None]
+        for sid in visitors[: max(0, len(visitors) - ANONYMOUS_SESSION_LIMIT + 1)]:
+            del self._sessions[sid]
+        return self._store(WebSession(sid=new_secret(), csrf=new_secret()))
+
+    def _store(self, web: WebSession) -> WebSession:
         self._sessions[web.sid] = web
         return web
+
+    def _admit(self, current: WebSession) -> None:
+        """Hay sitio para una sesión autenticada más, sin contar la de `current`.
+
+        Se comprueba antes de verificar la contraseña: la respuesta es la misma tenga o no razón
+        la contraseña. Antes se borran las fichas que ya no son vigentes, para liberar su sitio.
+        """
+        sessions = self._kernel.security.sessions
+        for web in self._sessions.values():
+            if web.token is not None and not sessions.is_live(web.token):
+                web.token = None
+        busy = sum(
+            1 for web in self._sessions.values() if web.token is not None and web is not current
+        )
+        if busy >= WEB_SESSION_LIMIT:
+            raise GuiError(
+                503,
+                "capacidad",
+                "La interfaz tiene demasiadas sesiones abiertas. Inténtelo de nuevo más tarde.",
+            )
 
     def _forget(self, web: WebSession) -> None:
         self._sessions.pop(web.sid, None)
@@ -327,27 +358,26 @@ class GuiApp:
                 "instalacion_pendiente",
                 "La instalación inicial no está completa. Complétela en la terminal.",
             )
+        previous = ctx.web
+        self._admit(previous)
         try:
             token = security.login(usuario, contrasena)
-        except SessionLimitError as exc:
-            raise GuiError(409, "sesiones_maximas", str(exc)) from exc
         except AuthorizationError as exc:
-            # Mensaje único para todo fallo de acceso: no se revela si la cuenta existe, está
-            # bloqueada o deshabilitada.
+            # Mensaje único para todo fallo de acceso. Incluye SessionLimitError (límite de
+            # sesiones de la cuenta, subclase de AuthorizationError): otra respuesta revelaría
+            # que la contraseña era correcta. El motivo queda en la auditoría.
             raise GuiError(401, "credenciales", CREDENTIALS_MESSAGE) from exc
-        previous = ctx.web
         if previous.token is not None:
             security.logout(previous.token)
         self._forget(previous)
-        ctx.web = self._new_web()
-        ctx.web.token = token
+        ctx.web = self._store(WebSession(sid=new_secret(), csrf=new_secret(), token=token))
         return self._session_state(ctx)
 
     def _logout(self, ctx: Context) -> dict[str, object]:
         if ctx.web.token is not None:
             self._kernel.security.logout(ctx.web.token)
         self._forget(ctx.web)
-        ctx.web = self._new_web()
+        ctx.web = self._new_visitor()
         return self._anonymous(ctx.web, self._kernel.security.installer.is_pending())
 
     def _reauthenticate(self, ctx: Context) -> dict[str, object]:

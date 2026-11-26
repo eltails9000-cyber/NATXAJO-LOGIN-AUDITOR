@@ -9,8 +9,9 @@ from pathlib import Path
 
 import pytest
 
+from natxajo_auditor.interfaces.gui import app as gui_app
 from natxajo_auditor.interfaces.gui import preferences
-from natxajo_auditor.interfaces.gui.app import GuiApp
+from natxajo_auditor.interfaces.gui.app import CREDENTIALS_MESSAGE, GuiApp
 from natxajo_auditor.interfaces.gui.http_security import (
     CONTENT_SECURITY_POLICY,
     security_headers,
@@ -205,15 +206,78 @@ def test_every_login_failure_gives_the_same_answer(entrada: ClienteGui, kernel: 
         assert respuesta.mensaje == "Usuario o contraseña incorrectos."
 
 
-def test_the_session_limit_is_reported_as_such(app: GuiApp) -> None:
-    # El límite se comprueba después de verificar la contraseña: no debe confundirse con
-    # un error de credenciales.
+def test_the_session_limit_gets_the_same_answer_as_a_wrong_password(
+    app: GuiApp, kernel: Kernel
+) -> None:
+    # Con el límite de la cuenta alcanzado, la contraseña correcta y la errónea responden igual:
+    # la respuesta no revela que la contraseña era buena. El motivo queda en la auditoría.
     for _ in range(MAX_CONCURRENT_SESSIONS):
         assert ClienteGui(app).entrar(ADMIN_USER, ADMIN_PASSWORD).estado == 200
-    respuesta = ClienteGui(app).entrar(ADMIN_USER, ADMIN_PASSWORD)
-    assert respuesta.estado == 409
-    assert respuesta.codigo == "sesiones_maximas"
-    assert "máximo" in respuesta.mensaje
+    con_limite = ClienteGui(app).entrar(ADMIN_USER, ADMIN_PASSWORD)
+    contrasena_erronea = ClienteGui(app).entrar(ADMIN_USER, "contraseña-erronea-1")
+    for respuesta in (con_limite, contrasena_erronea):
+        assert respuesta.estado == 401
+        assert respuesta.codigo == "credenciales"
+        assert respuesta.mensaje == CREDENTIALS_MESSAGE
+    assert len(kernel.audit.events_of_type("session.limit_reached")) == 1
+
+
+# --- Sesiones de la interfaz: visitantes y sesiones autenticadas ---------------------------------
+
+# Más peticiones que los dos límites juntos: si el tráfico anónimo pudiera expulsar sesiones, la
+# del usuario legítimo caería antes de terminar.
+TRAFICO_ANONIMO = 400
+
+
+def test_anonymous_traffic_does_not_log_out_an_authenticated_user(
+    app: GuiApp, kernel: Kernel
+) -> None:
+    legitimo = ClienteGui(app)
+    assert legitimo.entrar(ADMIN_USER, ADMIN_PASSWORD).estado == 200
+    for _ in range(TRAFICO_ANONIMO):
+        assert ClienteGui(app).pedir("GET", "/api/sesion").estado == 200
+    assert legitimo.pedir("GET", "/api/panel").estado == 200
+    assert kernel.audit.events_of_type("session.closed") == []
+
+
+def test_visitor_pool_is_bounded(app: GuiApp, monkeypatch: pytest.MonkeyPatch) -> None:
+    # El límite de visitantes sigue protegiendo los recursos: el pool no crece sin fin.
+    monkeypatch.setattr(gui_app, "ANONYMOUS_SESSION_LIMIT", 5)
+    for _ in range(50):
+        assert ClienteGui(app).pedir("GET", "/api/sesion").estado == 200
+    assert len(app._sessions) <= 5
+
+
+def test_a_full_pool_refuses_new_logins_and_evicts_nobody(
+    app: GuiApp, kernel: Kernel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gui_app, "WEB_SESSION_LIMIT", 2)
+    primero = ClienteGui(app)
+    segundo = ClienteGui(app)
+    assert primero.entrar(ADMIN_USER, ADMIN_PASSWORD).estado == 200
+    assert segundo.entrar(ADMIN_USER, ADMIN_PASSWORD).estado == 200
+    # La negativa llega antes de comprobar la contraseña: la misma para cualquier credencial.
+    rechazado = ClienteGui(app).entrar(ADMIN_USER, ADMIN_PASSWORD)
+    erroneo = ClienteGui(app).entrar(ADMIN_USER, "contraseña-erronea-1")
+    for respuesta in (rechazado, erroneo):
+        assert respuesta.estado == 503
+        assert respuesta.codigo == "capacidad"
+    assert primero.pedir("GET", "/api/panel").estado == 200
+    assert segundo.pedir("GET", "/api/panel").estado == 200
+    assert kernel.audit.events_of_type("session.closed") == []
+
+
+def test_sessions_that_are_no_longer_live_free_their_place(
+    app: GuiApp, kernel: Kernel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gui_app, "WEB_SESSION_LIMIT", 1)
+    primero = ClienteGui(app)
+    assert primero.entrar(ADMIN_USER, ADMIN_PASSWORD).estado == 200
+    kernel.security.sessions.close_all(ADMIN_USER)
+    segundo = ClienteGui(app)
+    assert segundo.entrar(ADMIN_USER, ADMIN_PASSWORD).estado == 200
+    assert primero.pedir("GET", "/api/panel").estado == 401
+    assert segundo.pedir("GET", "/api/panel").estado == 200
 
 
 def test_login_is_refused_until_the_installation_is_complete(kernel: Kernel) -> None:
