@@ -29,6 +29,7 @@ from natxajo_auditor.maintenance.service import MaintenanceService
 from natxajo_auditor.modules.manager import ModuleManager
 from natxajo_auditor.plugins.manager import PluginManager
 from natxajo_auditor.reporting.service import ReportService
+from natxajo_auditor.reporting.signing import KEY_FILE, ReportSigner
 from natxajo_auditor.security.passwords import DEFAULT_ITERATIONS, MIN_ITERATIONS
 from natxajo_auditor.security.service import SecurityService
 from natxajo_auditor.storage.audit import AuditConsumer, AuditLog
@@ -156,6 +157,7 @@ def compose(
             clock=clock,
             reports_dir=context.reports_dir,
             platform_version=kernel_version,
+            signer=ReportSigner(context.storage_dir / KEY_FILE),
         ),
     )
     services.put(
