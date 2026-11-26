@@ -172,7 +172,9 @@ class PluginManager:
                     trust_level=str(row[4]),
                     integrity_sha256=str(row[5]),
                     dependencies=tuple(json.loads(str(row[6]))),
-                    approved_review=self.reviews.is_approved(plugin_id, version),
+                    approved_review=self.reviews.is_approved(
+                        plugin_id, version, str(row[3]), str(row[5])
+                    ),
                     previous_version=None if row[7] is None else str(row[7]),
                     quarantined=bool(row[8]),
                 )
@@ -458,15 +460,33 @@ class PluginManager:
         decision: str,
         findings: str,
         *,
+        reviewed_sha256: str,
         confirmed: bool = False,
     ) -> None:
-        """Registra una decisión de revisión. El revisor es la cuenta de la sesión."""
+        """Registra una decisión de revisión. El revisor es la cuenta de la sesión.
+
+        `reviewed_sha256` es el SHA-256 del paquete que el revisor examinó. Si no coincide con el
+        instalado, la decisión se rechaza: así no se aprueba un contenido distinto del revisado.
+        """
         username = self._gate.username_for(token)
 
         def operation() -> None:
             with self._database.transaction() as connection:
                 record = self.get(plugin_id)
-                self.reviews.record(plugin_id, record.version, username, decision, findings)
+                if reviewed_sha256 != record.integrity_sha256:
+                    raise PluginError(
+                        f"el paquete revisado no es el instalado de {plugin_id}; "
+                        "revise el contenido actual antes de decidir"
+                    )
+                self.reviews.record(
+                    plugin_id,
+                    record.version,
+                    record.publisher_key_id,
+                    record.integrity_sha256,
+                    username,
+                    decision,
+                    findings,
+                )
                 self._audit.record(
                     REVIEWED_EVENT,
                     {
@@ -474,6 +494,7 @@ class PluginManager:
                         "version": record.version,
                         "reviewer": username,
                         "decision": decision,
+                        "integrity": record.integrity_sha256,
                     },
                     connection=connection,
                 )

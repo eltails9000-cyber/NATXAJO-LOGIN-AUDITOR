@@ -137,13 +137,24 @@ def test_third_party_plugin_needs_an_approved_review(
     kernel.plugins.install_package(make_plugin_source(tmp_path / "pkg"))
     with pytest.raises(PluginError, match="requiere una revisión aprobada"):
         kernel.plugins.enable("plugin_ejemplo")
+    sha = kernel.plugins.get("plugin_ejemplo").integrity_sha256
     kernel.plugins.record_review(
-        platform_token, "plugin_ejemplo", "rejected", "pendiente", confirmed=True
+        platform_token,
+        "plugin_ejemplo",
+        "rejected",
+        "pendiente",
+        reviewed_sha256=sha,
+        confirmed=True,
     )
     with pytest.raises(PluginError, match="requiere una revisión aprobada"):
         kernel.plugins.enable("plugin_ejemplo")
     kernel.plugins.record_review(
-        platform_token, "plugin_ejemplo", "approved", "correcto", confirmed=True
+        platform_token,
+        "plugin_ejemplo",
+        "approved",
+        "correcto",
+        reviewed_sha256=sha,
+        confirmed=True,
     )
     assert kernel.plugins.enable("plugin_ejemplo") == ["plugin_ejemplo"]
     assert kernel.plugins.get("plugin_ejemplo").approved_review is True
@@ -288,8 +299,34 @@ def test_install_from_repository_checks_the_catalog_entry(
 def test_review_requires_an_installed_plugin(kernel: Kernel, platform_token: str) -> None:
     with pytest.raises(PluginError, match="plugin no instalado"):
         kernel.plugins.record_review(
-            platform_token, "plugin_ejemplo", "approved", "", confirmed=True
+            platform_token,
+            "plugin_ejemplo",
+            "approved",
+            "",
+            reviewed_sha256="c" * 64,
+            confirmed=True,
         )
+
+
+def test_a_review_of_content_that_is_not_installed_is_refused(
+    kernel: Kernel,
+    platform_token: str,
+    tmp_path: Path,
+    make_plugin_source: Callable[..., Path],
+    register_publisher: Callable[..., None],
+) -> None:
+    register_publisher(kernel, trust_level="third_party")
+    kernel.plugins.install_package(make_plugin_source(tmp_path / "pkg"))
+    with pytest.raises(PluginError, match="no es el instalado"):
+        kernel.plugins.record_review(
+            platform_token,
+            "plugin_ejemplo",
+            "approved",
+            "revisado otro paquete",
+            reviewed_sha256="c" * 64,
+            confirmed=True,
+        )
+    assert not kernel.plugins.get("plugin_ejemplo").approved_review
 
 
 def test_state_survives_a_restart(

@@ -221,12 +221,20 @@ def test_review_names_the_session_account_and_is_refused_to_operators(
     kernel.plugins.install_package(make_plugin_source(tmp_path / "pkg"))
     kernel.security.create_account("operador_revision", PASSWORD, ["operador"])
     operator = _session(kernel, "operador_revision", PASSWORD, reauthenticate=True)
+    sha = kernel.plugins.get("plugin_ejemplo").integrity_sha256
     with pytest.raises(AuthorizationError, match=REVIEW_PERMISSION):
-        kernel.plugins.record_review(operator, "plugin_ejemplo", "approved", "", confirmed=True)
+        kernel.plugins.record_review(
+            operator, "plugin_ejemplo", "approved", "", reviewed_sha256=sha, confirmed=True
+        )
     assert not kernel.plugins.get("plugin_ejemplo").approved_review
 
     kernel.plugins.record_review(
-        platform_token, "plugin_ejemplo", "approved", "correcto", confirmed=True
+        platform_token,
+        "plugin_ejemplo",
+        "approved",
+        "correcto",
+        reviewed_sha256=sha,
+        confirmed=True,
     )
     assert kernel.plugins.get("plugin_ejemplo").approved_review
     reviewed = kernel.audit.events_of_type("plugin.reviewed")

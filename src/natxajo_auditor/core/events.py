@@ -55,7 +55,7 @@ CATALOG: Mapping[str, EventSpec] = {
     "plugin.enabled": _spec(_OP, "plugin version"),
     "plugin.disabled": _spec(_OP, "plugin", "reason"),
     "plugin.uninstalled": _spec(_OP, "plugin version"),
-    "plugin.reviewed": _spec(_SEC, "plugin version reviewer decision"),
+    "plugin.reviewed": _spec(_SEC, "plugin version reviewer decision", "integrity"),
     "plugin.publisher_registered": _spec(_SEC, "publisher trust_level username"),
     "plugin.publisher_revoked": _spec(_SEC, "publisher disabled username"),
     "account.created": _spec(_SEC, "username roles"),

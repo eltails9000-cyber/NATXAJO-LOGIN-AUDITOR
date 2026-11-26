@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from natxajo_auditor.core import ed25519
-from natxajo_auditor.core.exceptions import PluginError, ValidationError
+from natxajo_auditor.core.exceptions import PluginError, StorageError, ValidationError
 from natxajo_auditor.core.utilities import sha256_bytes
 from natxajo_auditor.kernel.kernel import Kernel
 from natxajo_auditor.plugins.api import check_api_version
@@ -385,21 +385,50 @@ def test_inventory_flags_executable_content(
     assert needs_manual_review(items)
 
 
+SHA = "a" * 64
+OTRO_SHA = "b" * 64
+EDITOR = "editor-ejemplo"
+
+
 def test_review_log_keeps_history_and_latest_decision(kernel: Kernel) -> None:
     reviews = kernel.plugins.reviews
-    reviews.record("plugin_ejemplo", "0.1.0", "Ana", "rejected", "falta documentación")
-    assert not reviews.is_approved("plugin_ejemplo", "0.1.0")
-    reviews.record("plugin_ejemplo", "0.1.0", "Ana", "approved", "correcto")
-    assert reviews.is_approved("plugin_ejemplo", "0.1.0")
-    assert reviews.latest_decision("plugin_ejemplo", "0.1.0") == "approved"
+    reviews.record("plugin_ejemplo", "0.1.0", EDITOR, SHA, "Ana", "rejected", "falta documentación")
+    assert not reviews.is_approved("plugin_ejemplo", "0.1.0", EDITOR, SHA)
+    reviews.record("plugin_ejemplo", "0.1.0", EDITOR, SHA, "Ana", "approved", "correcto")
+    assert reviews.is_approved("plugin_ejemplo", "0.1.0", EDITOR, SHA)
+    assert reviews.latest_decision("plugin_ejemplo", "0.1.0", EDITOR, SHA) == "approved"
     assert [item["decision"] for item in reviews.history("plugin_ejemplo", "0.1.0")] == [
         "rejected",
         "approved",
     ]
 
 
-def test_review_log_rejects_invalid_decisions(kernel: Kernel) -> None:
+def test_an_approval_does_not_carry_over_to_other_content_publisher_or_version(
+    kernel: Kernel,
+) -> None:
+    reviews = kernel.plugins.reviews
+    reviews.record("plugin_ejemplo", "0.1.0", EDITOR, SHA, "Ana", "approved", "correcto")
+    assert reviews.is_approved("plugin_ejemplo", "0.1.0", EDITOR, SHA)
+    assert not reviews.is_approved("plugin_ejemplo", "0.1.0", EDITOR, OTRO_SHA)
+    assert not reviews.is_approved("plugin_ejemplo", "0.1.0", "editor-otro", SHA)
+    assert not reviews.is_approved("plugin_ejemplo", "0.2.0", EDITOR, SHA)
+
+
+def test_review_log_rejects_invalid_input(kernel: Kernel) -> None:
+    reviews = kernel.plugins.reviews
     with pytest.raises(ValidationError, match="decisión de revisión no válida"):
-        kernel.plugins.reviews.record("plugin_ejemplo", "0.1.0", "Ana", "tal vez", "")
+        reviews.record("plugin_ejemplo", "0.1.0", EDITOR, SHA, "Ana", "tal vez", "")
     with pytest.raises(ValidationError):
-        kernel.plugins.reviews.record("plugin_ejemplo", "0.1.0", "  ", "approved", "")
+        reviews.record("plugin_ejemplo", "0.1.0", EDITOR, SHA, "  ", "approved", "")
+    with pytest.raises(ValidationError, match="SHA-256"):
+        reviews.record("plugin_ejemplo", "0.1.0", EDITOR, "no-es-un-hash", "Ana", "approved", "")
+
+
+def test_review_rows_cannot_be_changed_or_removed(kernel: Kernel) -> None:
+    reviews = kernel.plugins.reviews
+    reviews.record("plugin_ejemplo", "0.1.0", EDITOR, SHA, "Ana", "approved", "correcto")
+    with pytest.raises(StorageError, match="no se modifica"):
+        reviews._database.execute("UPDATE plugin_reviews SET decision = 'rejected'")
+    with pytest.raises(StorageError, match="no se elimina"):
+        reviews._database.execute("DELETE FROM plugin_reviews")
+    assert reviews.is_approved("plugin_ejemplo", "0.1.0", EDITOR, SHA)
