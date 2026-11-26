@@ -34,7 +34,7 @@ ACTIONS: frozenset[str] = frozenset(
     {"leer", "escribir", "ejecutar", "administrar", "restaurar", "aprobar", "revocar"}
 )
 SEGMENT_NAMES = ("subsistema", "modulo", "recurso", "accion")
-_SEGMENT = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
+_SEGMENT = re.compile(r"[a-z][a-z0-9_]{0,39}")
 
 
 @dataclass(frozen=True)
@@ -75,7 +75,7 @@ def parse_permission(
             raise ValidationError(f"{source}: subsistema desconocido: {value}")
         if index == 3 and value not in ACTIONS:
             raise ValidationError(f"{source}: acción desconocida: {value}")
-        if index in (1, 2) and not _SEGMENT.match(value):
+        if index in (1, 2) and not _SEGMENT.fullmatch(value):
             raise ValidationError(f"{source}: {name} no válido en '{code}': {value}")
     return Permission(parts[0], parts[1], parts[2], parts[3])
 

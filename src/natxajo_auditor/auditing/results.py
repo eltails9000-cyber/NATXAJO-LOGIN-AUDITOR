@@ -22,7 +22,7 @@ from natxajo_auditor.core.utilities import to_iso
 RISK_NONE = "ninguno"
 AUTHORIZATION_MIN = 3
 AUTHORIZATION_MAX = 200
-_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,7 @@ def validate_run(run: AuditRun) -> None:
         raise ValidationError("la referencia de autorización no tiene una longitud válida")
     if not run.authorization_reference.isprintable():
         raise ValidationError("la referencia de autorización contiene caracteres no imprimibles")
-    if not _SHA256.match(run.snapshot_sha256):
+    if not _SHA256.fullmatch(run.snapshot_sha256):
         raise ValidationError("la huella del documento no es un SHA-256")
     if not run.engine_version.strip():
         raise ValidationError("la evaluación no declara la versión del motor")
@@ -101,7 +101,7 @@ def _check_identity(run: AuditRun) -> None:
         raise ValidationError("el identificador de la evaluación no es un UUID") from None
     if parsed.version != 4 or str(parsed) != run.run_id:
         raise ValidationError("el identificador de la evaluación debe ser un UUID v4 en minúsculas")
-    if COMPANY_ID.match(run.company_id) is None:
+    if COMPANY_ID.fullmatch(run.company_id) is None:
         raise ValidationError("el identificador de empresa no es válido")
     if not run.username.strip():
         raise ValidationError("la evaluación no tiene usuario")

@@ -210,7 +210,7 @@ class ReportService:
 
 
 def _check_company(company_id: str) -> None:
-    if not isinstance(company_id, str) or COMPANY_ID.match(company_id) is None:
+    if not isinstance(company_id, str) or COMPANY_ID.fullmatch(company_id) is None:
         raise ValidationError("el identificador de empresa no es válido")
 
 

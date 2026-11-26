@@ -78,7 +78,7 @@ class TrustStore:
         public_key: bytes,
         trust_level: str,
     ) -> None:
-        if not KEY_ID.match(key_id):
+        if not KEY_ID.fullmatch(key_id):
             raise ValidationError(f"identificador de editor no válido: {key_id}")
         require_text(display_name, "nombre", "editor")
         if len(public_key) != 32:

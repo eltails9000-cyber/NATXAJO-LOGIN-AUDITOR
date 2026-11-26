@@ -19,7 +19,7 @@ class PluginStore:
         self.root = root
 
     def path_for(self, plugin_id: str, version: str) -> Path:
-        if not IDENTIFIER.match(plugin_id) or not SEMVER.match(version):
+        if not IDENTIFIER.fullmatch(plugin_id) or not SEMVER.fullmatch(version):
             raise ValidationError(f"identificador o versión no válidos: {plugin_id} {version}")
         return self.root / plugin_id / version
 

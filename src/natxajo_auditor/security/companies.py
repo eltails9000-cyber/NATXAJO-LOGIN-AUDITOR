@@ -46,7 +46,7 @@ class CompanyStore:
         return [_to_company(row) for row in rows]
 
     def create(self, company_id: str, name: str) -> Company:
-        if not COMPANY_ID.match(company_id):
+        if not COMPANY_ID.fullmatch(company_id):
             raise ValidationError(
                 f"identificador de empresa no válido: {company_id} (minúsculas, dígitos y "
                 "guion; de 3 a 40 caracteres, empezando por letra)"

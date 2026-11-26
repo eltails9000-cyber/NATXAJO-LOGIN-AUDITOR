@@ -17,7 +17,7 @@ from typing import Any
 from natxajo_auditor.core.exceptions import ValidationError
 from natxajo_auditor.core.utilities import to_iso
 
-COMPANY_ID = re.compile(r"^[a-z][a-z0-9-]{2,39}$")
+COMPANY_ID = re.compile(r"[a-z][a-z0-9-]{2,39}")
 _SECRET_HINTS = ("password", "contrase", "token", "secret", "clave", "ficha")
 
 
@@ -127,7 +127,7 @@ def build_event(
     for key in keys:
         if any(hint in key.lower() for hint in _SECRET_HINTS):
             raise ValidationError(f"evento {name}: la clave {key} parece sensible")
-    if company_id is not None and not COMPANY_ID.match(company_id):
+    if company_id is not None and not COMPANY_ID.fullmatch(company_id):
         raise ValidationError(f"identificador de empresa no válido: {company_id}")
     return Event(
         event_id=event_id,
