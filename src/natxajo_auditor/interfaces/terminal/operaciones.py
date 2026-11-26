@@ -225,6 +225,10 @@ def maintenance_cleanup(console: Console) -> None:
         console.token, older_than_hours=hours, confirmed=True
     )
     console.write(f"Eliminados: {result['eliminados']} de {result['planeados']} planeados")
+    if result["fallidos"]:
+        console.write(
+            f"No se pudieron eliminar {result['fallidos']} archivo(s): revise sus permisos"
+        )
 
 
 def rules_list(console: Console) -> None:

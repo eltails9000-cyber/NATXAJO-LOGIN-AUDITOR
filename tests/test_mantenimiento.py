@@ -127,7 +127,12 @@ def test_cleanup_needs_explicit_confirmation_and_then_removes_only_the_planned_f
     assert old.exists()
 
     result = world.maintenance.apply_cleanup(platform_token, older_than_hours=1, confirmed=True)
-    assert result == {"planeados": 1, "eliminados": 1}
+    assert result == {
+        "planeados": 1,
+        "eliminados": 1,
+        "fallidos": 0,
+        "detalle_fallidos": [],
+    }
     assert not old.exists()
     assert keep.exists()
     events = world.audit.events_of_type("maintenance.cleanup_applied")
@@ -175,7 +180,9 @@ def test_a_path_outside_the_managed_folders_is_not_removed(tmp_path: Path) -> No
     managed = tmp_path / "gestionada"
     managed.mkdir()
     outside = _old_file(tmp_path / "fuera.tmp")
-    assert apply_cleanup([outside], [managed]) == 0
+    result = apply_cleanup([outside], [managed])
+    assert result.removed == ()
+    assert result.skipped == (outside,)
     assert outside.exists()
 
 

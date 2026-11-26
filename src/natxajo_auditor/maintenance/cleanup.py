@@ -10,11 +10,25 @@ gestionadas y sus subcarpetas directas (por ejemplo `reports/<empresa>/`).
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Final
 
 TEMP_SUFFIX: Final = ".tmp"
+
+
+@dataclass(frozen=True)
+class CleanupResult:
+    """Qué pasó con cada ruta de la lista. Solo está en `removed` lo que se borró de verdad.
+
+    `failed` guarda la ruta y el motivo (tipo o mensaje del sistema, sin ruta). `skipped` son las
+    rutas que no cumplen las reglas (enlaces, carpetas no gestionadas, otra extensión).
+    """
+
+    removed: tuple[Path, ...]
+    failed: tuple[tuple[Path, str], ...]
+    skipped: tuple[Path, ...]
 
 
 def _folders(directories: Iterable[Path]) -> list[Path]:
@@ -50,15 +64,38 @@ def plan_cleanup(
     return [path for path in temp_files(directories) if path.stat().st_mtime < limit]
 
 
-def apply_cleanup(paths: Sequence[Path], directories: Iterable[Path]) -> int:
-    """Borra los temporales de la lista que siguen cumpliendo las reglas. Devuelve cuántos borró."""
+def apply_cleanup(paths: Sequence[Path], directories: Iterable[Path]) -> CleanupResult:
+    """Borra los temporales de la lista que siguen cumpliendo las reglas.
+
+    Un fallo en un archivo no detiene la limpieza: se anota y se sigue con el resto. Un archivo
+    cuyo borrado falla nunca cuenta como eliminado.
+    """
     allowed = {folder.resolve() for folder in _folders(directories)}
-    removed = 0
+    removed: list[Path] = []
+    failed: list[tuple[Path, str]] = []
+    skipped: list[Path] = []
     for path in paths:
-        if path.is_symlink() or not path.is_file() or not path.name.endswith(TEMP_SUFFIX):
+        try:
+            if not _eligible(path, allowed):
+                skipped.append(path)
+                continue
+            path.unlink()
+        except OSError as exc:
+            failed.append((path, _reason(exc)))
             continue
-        if path.parent.resolve() not in allowed:
-            continue
-        path.unlink()
-        removed += 1
-    return removed
+        removed.append(path)
+    return CleanupResult(tuple(removed), tuple(failed), tuple(skipped))
+
+
+def _eligible(path: Path, allowed: set[Path]) -> bool:
+    return (
+        not path.is_symlink()
+        and path.is_file()
+        and path.name.endswith(TEMP_SUFFIX)
+        and path.parent.resolve() in allowed
+    )
+
+
+def _reason(error: OSError) -> str:
+    """Motivo legible sin la ruta: el mensaje del sistema o el nombre del tipo de error."""
+    return error.strerror or type(error).__name__

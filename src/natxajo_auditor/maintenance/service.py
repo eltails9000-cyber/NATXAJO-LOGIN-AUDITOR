@@ -91,14 +91,21 @@ class MaintenanceService:
             paths = plan_cleanup(
                 self._managed, now=self._clock(), older_than=timedelta(hours=hours)
             )
-            removed = apply_cleanup(paths, self._managed)
+            result = apply_cleanup(paths, self._managed)
             self._audit.record(
                 EVENT_CLEANUP,
-                {"removed": removed},
+                {"removed": len(result.removed), "failed": len(result.failed)},
                 company_id=PLATFORM_COMPANY,
                 actor=username,
             )
-            return {"planeados": len(paths), "eliminados": removed}
+            return {
+                "planeados": len(paths),
+                "eliminados": len(result.removed),
+                "fallidos": len(result.failed),
+                "detalle_fallidos": [
+                    {"archivo": path.name, "motivo": reason} for path, reason in result.failed
+                ],
+            }
 
         return self._gate.run(
             token, CLEANUP_PERMISSION, operation, confirmed=confirmed, company_id=None

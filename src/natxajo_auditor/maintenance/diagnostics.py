@@ -10,11 +10,12 @@ Las comprobaciones son de solo lectura. No reparan nada: indican qué revisar. E
 from __future__ import annotations
 
 import os
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from natxajo_auditor.core.exceptions import NatxajoError
 from natxajo_auditor.maintenance.cleanup import temp_files
 from natxajo_auditor.storage.backups import BackupManager
 from natxajo_auditor.storage.database import Database
@@ -54,16 +55,26 @@ def collect_checks(
     python_version: tuple[int, int, int],
     sqlite_version: tuple[int, int, int],
 ) -> list[Check]:
+    """Ejecuta cada comprobación por separado. Si una falla por E/S o por datos ilegibles, su
+    resultado es un error visible y las demás se ejecutan igualmente."""
     return [
-        _python(python_version),
-        _sqlite(sqlite_version),
-        _database(database),
-        _migrations(database),
-        _outbox(outbox),
-        _backups(backups),
-        _temp_files(managed_dirs),
-        _writable(managed_dirs),
+        _guarded("python", lambda: _python(python_version)),
+        _guarded("sqlite", lambda: _sqlite(sqlite_version)),
+        _guarded("base_de_datos", lambda: _database(database)),
+        _guarded("migraciones", lambda: _migrations(database)),
+        _guarded("eventos", lambda: _outbox(outbox)),
+        _guarded("copias", lambda: _backups(backups)),
+        _guarded("temporales", lambda: _temp_files(managed_dirs)),
+        _guarded("escritura", lambda: _writable(managed_dirs)),
     ]
+
+
+def _guarded(name: str, check: Callable[[], Check]) -> Check:
+    try:
+        return check()
+    except (OSError, ValueError, NatxajoError) as exc:
+        # Solo el tipo del error: el mensaje puede llevar rutas o contenido de archivos.
+        return Check(name, Status.ERROR, f"no se pudo comprobar: {type(exc).__name__}")
 
 
 def _python(version: tuple[int, int, int]) -> Check:
@@ -90,7 +101,9 @@ def _database(database: Database) -> Check:
     messages = [str(row[0]) for row in rows]
     if messages == ["ok"]:
         return Check("base_de_datos", Status.OK, "integridad verificada")
-    return Check("base_de_datos", Status.ERROR, f"integridad: {messages[0][:160]}")
+    # Una respuesta vacía tampoco es un estado sano: se marca como error.
+    detail = messages[0][:160] if messages else "sin respuesta del motor"
+    return Check("base_de_datos", Status.ERROR, f"integridad: {detail}")
 
 
 def _migrations(database: Database) -> Check:

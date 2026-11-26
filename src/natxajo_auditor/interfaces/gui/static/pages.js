@@ -1215,7 +1215,7 @@
           texto: `Se borrarán los archivos temporales de más de ${horasElegidas} horas en las carpetas que gestiona la plataforma.`,
           etiqueta: "Limpiar",
         }),
-        { exito: { titulo: "Limpieza aplicada", detalle: (r) => `Eliminados ${r.eliminados} de ${r.planeados}` }, titulo: "No se pudo limpiar" }
+        { exito: { titulo: "Limpieza aplicada", detalle: (r) => `Eliminados ${r.eliminados} de ${r.planeados}` + (r.fallidos ? `. No se pudieron eliminar ${r.fallidos}: revise sus permisos` : "") }, titulo: "No se pudo limpiar" }
       );
       plan = null;
       N.pintar(resultado, []);
