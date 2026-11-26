@@ -8,12 +8,14 @@ Para cada operación comprueba, en este orden:
 4. Si la operación es crítica: el usuario la ha confirmado y ha reautenticado la sesión hace poco.
 
 La empresa del actor se lee de su cuenta en la base de datos, nunca de la entrada del usuario.
-Las denegaciones y las ejecuciones quedan en la auditoría. La auditoría no guarda contraseñas ni
-fichas de sesión.
+Las denegaciones, las ejecuciones y los fallos de una operación autorizada quedan en la auditoría
+(`operation.denied`, `operation.executed` y `operation.failed`). La auditoría no guarda contraseñas
+ni fichas de sesión, y de un fallo registra solo el tipo de error.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -31,6 +33,7 @@ from natxajo_auditor.security.tenancy import Actor, may_act_on
 from natxajo_auditor.storage.audit import AuditLog
 
 T = TypeVar("T")
+LOG = logging.getLogger(__name__)
 
 CRITICAL_PERMISSIONS: frozenset[str] = frozenset(
     {
@@ -90,7 +93,9 @@ class OperationGuard:
         actor = self.actor_for(token)
         if not may_act_on(actor, company_id):
             self._record_denied(actor, permission, SCOPE_DENIED, company_id)
-            raise AuthorizationError(SCOPE_DENIED)
+            error = AuthorizationError(SCOPE_DENIED)
+            _mark(error)
+            raise error
         return actor
 
     def run(
@@ -102,6 +107,12 @@ class OperationGuard:
         confirmed: bool = False,
         company_id: str | None = None,
     ) -> T:
+        """Ejecuta operation si la sesión la autoriza. Registra denegación, éxito o fallo.
+
+        Un error al escribir en la auditoría no oculta el resultado de la operación: si la
+        operación ya se ejecutó, se devuelve su resultado y el fallo del registro se anota en el
+        log del proceso. Si la operación falla, se relanza su excepción original.
+        """
         session = self._sessions.validate(token)
         actor = self._actor(session.username, session.session_id)
         critical = permission in CRITICAL_PERMISSIONS
@@ -115,13 +126,16 @@ class OperationGuard:
                 raise AuthorizationError("operación crítica: reautentique la sesión")
         except AuthorizationError as exc:
             self._record_denied(actor, permission, str(exc), company_id)
+            _mark(exc)
             raise
-        result = operation()
-        self._audit.record(
-            "operation.executed",
-            {"username": actor.username, "permission": permission, "critical": critical},
-            company_id=company_id or actor.company_id,
-        )
+        try:
+            result = operation()
+        except BaseException as exc:
+            if not _is_marked(exc):
+                self._note_failure(actor, permission, critical, company_id, exc)
+                _mark(exc)
+            raise
+        self._note_success(actor, permission, critical, company_id)
         return result
 
     def _actor(self, username: str, session_id: int) -> Actor:
@@ -142,3 +156,58 @@ class OperationGuard:
         if target is not None and target != actor.company_id:
             payload["empresa_destino"] = target
         self._audit.record("operation.denied", payload, company_id=actor.company_id)
+
+    def _note_success(
+        self,
+        actor: Actor,
+        permission: str,
+        critical: bool,
+        company_id: str | None,
+    ) -> None:
+        try:
+            self._audit.record(
+                "operation.executed",
+                {"username": actor.username, "permission": permission, "critical": critical},
+                company_id=company_id or actor.company_id,
+            )
+        # La operación ya se hizo: un fallo del registro se anota, pero no oculta su resultado.
+        except Exception:
+            LOG.exception("No se pudo registrar la ejecución de %s", permission)
+
+    def _note_failure(
+        self,
+        actor: Actor,
+        permission: str,
+        critical: bool,
+        company_id: str | None,
+        error: BaseException,
+    ) -> None:
+        """Registra el fallo sin el texto del error: solo su tipo. Así no se copian rutas,
+        consultas ni datos que el error pudiera llevar dentro."""
+        try:
+            self._audit.record(
+                "operation.failed",
+                {
+                    "username": actor.username,
+                    "permission": permission,
+                    "critical": critical,
+                    "error": type(error).__name__,
+                },
+                company_id=company_id or actor.company_id,
+            )
+        # El error original es el que debe llegar al llamador: el del registro solo se anota.
+        except Exception:
+            LOG.exception("No se pudo registrar el fallo de %s", permission)
+
+
+_MARK = "_natxajo_registrado"
+
+
+def _mark(error: BaseException) -> None:
+    """Marca una excepción ya registrada como denegación o fallo. Una operación anidada que
+    relanza el mismo error no lo registra dos veces."""
+    setattr(error, _MARK, True)
+
+
+def _is_marked(error: BaseException) -> bool:
+    return bool(getattr(error, _MARK, False))

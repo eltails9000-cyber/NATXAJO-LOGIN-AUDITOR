@@ -76,6 +76,7 @@ CATALOG: Mapping[str, EventSpec] = {
     "grant.revoked": _spec(_SEC, "grant actor"),
     "operation.denied": _spec(_SEC, "username permission reason", "empresa_destino"),
     "operation.executed": _spec(_SEC, "username permission critical"),
+    "operation.failed": _spec(_SEC, "username permission critical error"),
     "installation.code_issued": _spec(_SEC),
     "installation.code_rejected": _spec(_SEC, "intentos"),
     "installation.completed": _spec(_SEC, "username"),
