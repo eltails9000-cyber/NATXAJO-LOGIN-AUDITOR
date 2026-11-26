@@ -23,6 +23,9 @@ REPORT_READ_PERMISSION = "informes:nucleo:exportacion:leer"
 REPORT_EXPORT_PERMISSION = "informes:nucleo:exportacion:escribir"
 DIAGNOSTIC_PERMISSION = "mantenimiento:nucleo:diagnostico:leer"
 CLEANUP_PERMISSION = "mantenimiento:nucleo:limpieza:ejecutar"
+# Reencola un evento fallido. Solo administradores por defecto: un evento que vuelve a entregarse
+# puede disparar efectos en los consumidores que aún no lo recibieron.
+EVENT_REQUEUE_PERMISSION = "mantenimiento:nucleo:eventos:ejecutar"
 
 # Plugins: estado (lectura), cuarentena (escribir, no crítica: es una medida defensiva), liberar
 # la cuarentena y cambiar de versión (ambas críticas: cambian qué código puede habilitarse).

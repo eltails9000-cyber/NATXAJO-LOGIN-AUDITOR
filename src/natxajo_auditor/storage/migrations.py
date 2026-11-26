@@ -546,6 +546,23 @@ MIGRATIONS: tuple[Migration, ...] = (
             "ALTER TABLE plugin_reviews DROP COLUMN publisher_key_id",
         ),
     ),
+    Migration(
+        version=13,
+        name="reencolado_controlado_de_eventos",
+        # Contadores de reencolado: cuántas veces se devolvió un evento fallido a la cola y cuándo.
+        # La constancia completa (quién y cuándo) queda en la auditoría, que no se reescribe.
+        statements=(
+            (
+                "ALTER TABLE event_outbox ADD COLUMN requeues INTEGER NOT NULL DEFAULT 0 "
+                "CHECK (requeues >= 0)"
+            ),
+            "ALTER TABLE event_outbox ADD COLUMN last_requeued_at TEXT",
+        ),
+        down=(
+            "ALTER TABLE event_outbox DROP COLUMN last_requeued_at",
+            "ALTER TABLE event_outbox DROP COLUMN requeues",
+        ),
+    ),
 )
 
 # Tablas cuyas filas se pierden al revertir una migración. Con filas dentro, la reversión se niega

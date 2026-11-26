@@ -197,15 +197,29 @@ def test_dead_events_are_delivered_after_requeue_once_the_consumer_recovers(
 ) -> None:
     outbox = EventOutbox(database, _clock, max_attempts=3)
     outbox.register(Recorder(failures=3))
+    outbox.register(AuditConsumer())
+    # La auditoría comparte el bus: un segundo bus sobre la misma tabla entregaría los eventos
+    # sin pasar por el consumidor de prueba.
+    audit = AuditLog(database, outbox)
     outbox.emit("module.enabled", {"module": "alfa"})
     outbox.dispatch_pending()
     outbox.dispatch_pending()
-    assert len(outbox.dead_events()) == 1
-    assert outbox.requeue_dead() == 1
-    assert outbox.dispatch_pending().delivered == 1
+    [dead] = outbox.dead_events()
+    assert outbox.requeue_dead(audit=audit, actor="operador_prueba") == 1
+    # La entrega ocurre al confirmarse el reencolado: no hace falta una llamada posterior.
     assert outbox.pending_count() == 0
     assert outbox.dead_events() == []
-    assert _deliveries(database, "contador") == 1
+    rows = database.fetchall(
+        "SELECT COUNT(*) FROM pruebas_entregas WHERE consumer = 'contador' AND event_id = ?",
+        (dead["event_id"],),
+    )
+    assert rows[0][0] == 1
+    # La constancia del reencolado queda en la auditoría, con el evento y el operador.
+    requeued = audit.events_of_type("event.requeued")
+    assert [event["payload"] for event in requeued] == [
+        {"event_id": dead["event_id"], "name": "module.enabled"}
+    ]
+    assert [event["actor"] for event in requeued] == ["operador_prueba"]
 
 
 def test_later_events_wait_behind_a_pending_failure(database: Database) -> None:

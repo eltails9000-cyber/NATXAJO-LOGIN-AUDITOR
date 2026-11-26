@@ -17,6 +17,7 @@ from typing import Final
 from natxajo_auditor.core.contracts import (
     CLEANUP_PERMISSION,
     DIAGNOSTIC_PERMISSION,
+    EVENT_REQUEUE_PERMISSION,
     PLATFORM_COMPANY,
     OperationGate,
 )
@@ -109,6 +110,23 @@ class MaintenanceService:
 
         return self._gate.run(
             token, CLEANUP_PERMISSION, operation, confirmed=confirmed, company_id=None
+        )
+
+    def requeue_event(self, token: str, event_id: str, *, confirmed: bool) -> None:
+        """Devuelve a la cola un evento fallido. Solo API: la terminal y la interfaz no lo ofrecen.
+
+        Es una operación crítica: exige confirmación y reautenticación reciente. Queda constancia en
+        la auditoría con el usuario que lo hizo.
+        """
+        if not isinstance(event_id, str) or not 1 <= len(event_id) <= 64:
+            raise ValidationError("el identificador del evento no es válido")
+
+        def operation() -> None:
+            username = self._gate.username_for(token)
+            self._outbox.requeue_event(event_id, audit=self._audit, actor=username)
+
+        self._gate.run(
+            token, EVENT_REQUEUE_PERMISSION, operation, confirmed=confirmed, company_id=None
         )
 
     def _checks(self) -> list[Check]:
