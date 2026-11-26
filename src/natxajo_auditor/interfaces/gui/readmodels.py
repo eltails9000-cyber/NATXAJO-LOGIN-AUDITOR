@@ -412,11 +412,17 @@ class ReadModels:
         report["version"] = self._kernel.kernel_version
         return report
 
-    def system_info(self) -> dict[str, object]:
+    def system_info(self, token: str) -> dict[str, object]:
+        """Versión para cualquier cuenta. El detalle técnico (estado, servicios, versiones de Python
+        y SQLite, sistema operativo) solo para la plataforma: una empresa no lo ve."""
+        version = self._kernel.kernel_version
+        if not self.viewer(token).platform:
+            return {"version": version, "restringido": True}
         health = self._kernel.health()
         services = health["services"]
         return {
-            "version": health["kernel_version"],
+            "version": version,
+            "restringido": False,
             "estado_nucleo": health["state"],
             "servicios": len(services) if isinstance(services, list) else 0,
             "python": platform.python_version(),

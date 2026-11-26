@@ -342,3 +342,26 @@ def test_security_headers_are_declared_for_every_response() -> None:
     assert cabeceras["X-Frame-Options"] == "DENY"
     assert cabeceras["X-Content-Type-Options"] == "nosniff"
     assert cabeceras["Cache-Control"] == "no-store"
+
+
+# --- Información del sistema según la cuenta -----------------------------------------------------
+
+CAMPOS_TECNICOS = ("estado_nucleo", "servicios", "python", "sqlite", "sistema")
+
+
+def test_a_company_account_sees_only_the_version_of_the_system(app: GuiApp, kernel: Kernel) -> None:
+    kernel.security.companies.create("acme", "Acme S.A.")
+    kernel.security.create_account("auditor_acme", "contraseña-de-prueba-7", ["auditor"], "acme")
+    empresa = ClienteGui(app)
+    assert empresa.entrar("auditor_acme", "contraseña-de-prueba-7").estado == 200
+    datos = empresa.pedir("GET", "/api/configuracion").datos
+    assert datos["restringido"] is True
+    assert "version" in datos
+    for campo in CAMPOS_TECNICOS:
+        assert campo not in datos
+
+
+def test_a_platform_account_sees_the_technical_detail(entrada: ClienteGui) -> None:
+    datos = entrada.pedir("GET", "/api/configuracion").datos
+    assert datos["restringido"] is False
+    assert set(CAMPOS_TECNICOS) <= set(datos)

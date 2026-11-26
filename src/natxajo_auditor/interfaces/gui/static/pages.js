@@ -1300,17 +1300,20 @@
           N.el("label", { class: "casilla", for: "notificaciones" }, notificaciones, N.el("span", { text: "Mostrar avisos informativos (los errores siempre se muestran)" })),
           N.el("div", { class: "acciones" }, N.el("button", { class: "btn btn-primario", type: "submit", text: "Guardar preferencias" }))
         );
-        const sistema = N.ficha([
-          ["Versión", datos.version],
-          ["Estado del núcleo", datos.estado_nucleo],
-          ["Servicios", N.numero(datos.servicios)],
-          ["Python", datos.python],
-          ["SQLite", datos.sqlite],
-          ["Sistema", datos.sistema],
-        ]);
+        const sistema = datos.restringido
+          ? N.ficha([["Versión", datos.version]])
+          : N.ficha([
+              ["Versión", datos.version],
+              ["Estado del núcleo", datos.estado_nucleo],
+              ["Servicios", N.numero(datos.servicios)],
+              ["Python", datos.python],
+              ["SQLite", datos.sqlite],
+              ["Sistema", datos.sistema],
+            ]);
         const sesion = N.estado.sesion || {};
         return [
           datos.aviso_preferencias ? N.alerta("aviso", datos.aviso_preferencias) : null,
+          datos.restringido ? N.alerta("aviso", "El detalle técnico del sistema solo lo ve la plataforma.") : null,
           N.el("div", { class: "rejilla principal" },
             N.panel({ titulo: "Preferencias de la interfaz", sub: "Se guardan en config/interfaz.json", cuerpo: formulario }),
             N.el("div", { class: "columna" },

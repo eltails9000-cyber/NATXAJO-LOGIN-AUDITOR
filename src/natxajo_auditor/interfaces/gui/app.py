@@ -404,7 +404,7 @@ class GuiApp:
 
     def _configuration(self, ctx: Context) -> dict[str, object]:
         return {
-            **self._reads.system_info(),
+            **self._reads.system_info(ctx.token()),
             **self._preferences_payload(),
             "opciones": {
                 "temas": list(THEMES),
