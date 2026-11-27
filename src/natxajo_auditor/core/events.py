@@ -17,7 +17,7 @@ from typing import Any
 from natxajo_auditor.core.exceptions import ValidationError
 from natxajo_auditor.core.utilities import to_iso
 
-COMPANY_ID = re.compile(r"^[a-z][a-z0-9-]{2,39}$")
+COMPANY_ID = re.compile(r"[a-z][a-z0-9-]{2,39}")
 _SECRET_HINTS = ("password", "contrase", "token", "secret", "clave", "ficha")
 
 
@@ -55,7 +55,7 @@ CATALOG: Mapping[str, EventSpec] = {
     "plugin.enabled": _spec(_OP, "plugin version"),
     "plugin.disabled": _spec(_OP, "plugin", "reason"),
     "plugin.uninstalled": _spec(_OP, "plugin version"),
-    "plugin.reviewed": _spec(_SEC, "plugin version reviewer decision"),
+    "plugin.reviewed": _spec(_SEC, "plugin version reviewer decision", "integrity"),
     "plugin.publisher_registered": _spec(_SEC, "publisher trust_level username"),
     "plugin.publisher_revoked": _spec(_SEC, "publisher disabled username"),
     "account.created": _spec(_SEC, "username roles"),
@@ -70,12 +70,14 @@ CATALOG: Mapping[str, EventSpec] = {
     "session.closed": _spec(_SEC, "username"),
     "session.closed_all": _spec(_SEC, "username"),
     "session.reauthenticated": _spec(_SEC, "username"),
+    "session.limit_reached": _spec(_SEC, "username"),
     "grant.requested": _spec(_SEC, "grant username permission"),
     "grant.approved": _spec(_SEC, "grant approver permission"),
     "grant.rejected": _spec(_SEC, "grant actor"),
     "grant.revoked": _spec(_SEC, "grant actor"),
     "operation.denied": _spec(_SEC, "username permission reason", "empresa_destino"),
     "operation.executed": _spec(_SEC, "username permission critical"),
+    "operation.failed": _spec(_SEC, "username permission critical error"),
     "installation.code_issued": _spec(_SEC),
     "installation.code_rejected": _spec(_SEC, "intentos"),
     "installation.completed": _spec(_SEC, "username"),
@@ -83,7 +85,9 @@ CATALOG: Mapping[str, EventSpec] = {
     "audit.run_recorded": _spec(_OP, "run_id profile passed failed not_evaluable risk"),
     "report.exported": _spec(_OP, "run_id report_id format"),
     "report.failed": _spec(_OP, "run_id format reason"),
-    "maintenance.cleanup_applied": _spec(_OP, "removed"),
+    "maintenance.cleanup_applied": _spec(_OP, "removed", "failed"),
+    "event.requeued": _spec(_SEC, "event_id name"),
+    "configuration.restored": _spec(_SEC, "archivo"),
     "plugin.quarantined": _spec(_SEC, "plugin version reason username"),
     "plugin.quarantine_released": _spec(_SEC, "plugin version username"),
     "plugin.updated": _spec(_OP, "plugin from to publisher username"),
@@ -127,7 +131,7 @@ def build_event(
     for key in keys:
         if any(hint in key.lower() for hint in _SECRET_HINTS):
             raise ValidationError(f"evento {name}: la clave {key} parece sensible")
-    if company_id is not None and not COMPANY_ID.match(company_id):
+    if company_id is not None and not COMPANY_ID.fullmatch(company_id):
         raise ValidationError(f"identificador de empresa no válido: {company_id}")
     return Event(
         event_id=event_id,

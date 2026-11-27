@@ -504,7 +504,74 @@ MIGRATIONS: tuple[Migration, ...] = (
             "DROP TABLE plugin_quarantine",
         ),
     ),
+    Migration(
+        version=12,
+        name="vinculo_de_revisiones_y_auditoria_inmutable",
+        statements=(
+            # Una aprobación vale solo para el editor, la versión y el SHA-256 que el revisor vio.
+            # Las filas anteriores a esta migración no tienen estos datos: no autorizan nada.
+            (
+                "ALTER TABLE plugin_reviews ADD COLUMN publisher_key_id TEXT NOT NULL DEFAULT '' "
+                "CHECK (length(publisher_key_id) <= 64)"
+            ),
+            (
+                "ALTER TABLE plugin_reviews ADD COLUMN integrity_sha256 TEXT NOT NULL DEFAULT '' "
+                "CHECK (length(integrity_sha256) IN (0, 64))"
+            ),
+            """
+            CREATE TRIGGER plugin_reviews_are_immutable BEFORE UPDATE ON plugin_reviews
+            BEGIN SELECT RAISE(ABORT, 'una decisión de revisión no se modifica'); END
+            """,
+            """
+            CREATE TRIGGER plugin_reviews_cannot_be_deleted BEFORE DELETE ON plugin_reviews
+            BEGIN SELECT RAISE(ABORT, 'una decisión de revisión no se elimina'); END
+            """,
+            # Los eventos de auditoría solo se añaden. Quien tenga acceso a la base no puede
+            # reescribir ni borrar el historial sin dejar la base en un estado que el motor rechace.
+            """
+            CREATE TRIGGER audit_events_are_immutable BEFORE UPDATE ON audit_events
+            BEGIN SELECT RAISE(ABORT, 'un evento de auditoría no se modifica'); END
+            """,
+            """
+            CREATE TRIGGER audit_events_cannot_be_deleted BEFORE DELETE ON audit_events
+            BEGIN SELECT RAISE(ABORT, 'un evento de auditoría no se elimina'); END
+            """,
+        ),
+        down=(
+            "DROP TRIGGER audit_events_cannot_be_deleted",
+            "DROP TRIGGER audit_events_are_immutable",
+            "DROP TRIGGER plugin_reviews_cannot_be_deleted",
+            "DROP TRIGGER plugin_reviews_are_immutable",
+            "ALTER TABLE plugin_reviews DROP COLUMN integrity_sha256",
+            "ALTER TABLE plugin_reviews DROP COLUMN publisher_key_id",
+        ),
+    ),
+    Migration(
+        version=13,
+        name="reencolado_controlado_de_eventos",
+        # Contadores de reencolado: cuántas veces se devolvió un evento fallido a la cola y cuándo.
+        # La constancia completa (quién y cuándo) queda en la auditoría, que no se reescribe.
+        statements=(
+            (
+                "ALTER TABLE event_outbox ADD COLUMN requeues INTEGER NOT NULL DEFAULT 0 "
+                "CHECK (requeues >= 0)"
+            ),
+            "ALTER TABLE event_outbox ADD COLUMN last_requeued_at TEXT",
+        ),
+        down=(
+            "ALTER TABLE event_outbox DROP COLUMN last_requeued_at",
+            "ALTER TABLE event_outbox DROP COLUMN requeues",
+        ),
+    ),
 )
+
+# Tablas cuyas filas se pierden al revertir una migración. Con filas dentro, la reversión se niega
+# salvo que se pida explícitamente con discard_data=True.
+PROTECTED_BY_MIGRATION: dict[int, tuple[str, ...]] = {
+    10: ("audit_runs", "audit_findings", "report_exports"),
+    11: ("plugin_quarantine", "plugin_history"),
+    12: ("plugin_reviews",),
+}
 
 _BOOKKEEPING = (
     "CREATE TABLE IF NOT EXISTS schema_migrations ("
@@ -563,12 +630,18 @@ def pending_versions(
 
 
 def rollback_migrations(
-    database: Database, target_version: int, migrations: tuple[Migration, ...] = MIGRATIONS
+    database: Database,
+    target_version: int,
+    migrations: tuple[Migration, ...] = MIGRATIONS,
+    *,
+    discard_data: bool = False,
 ) -> list[int]:
     """Revierte, de la más reciente a la más antigua, las migraciones posteriores a target_version.
 
-    Antes de ejecutar nada comprueba que todas las migraciones a revertir son reversibles. Cada
-    reversión es transaccional. Devuelve las versiones revertidas.
+    Antes de ejecutar nada comprueba que todas las migraciones a revertir son reversibles y que no
+    borran filas sin permiso: si una tabla de PROTECTED_BY_MIGRATION tiene filas, la reversión se
+    rechaza salvo discard_data=True. Cada reversión es transaccional. Devuelve las versiones
+    revertidas.
     """
     _check_definitions(migrations)
     known = {migration.version: migration for migration in migrations}
@@ -576,6 +649,15 @@ def rollback_migrations(
         int(row[0]) for row in database.fetchall("SELECT version FROM schema_migrations")
     )
     to_revert = [version for version in reversed(applied) if version > target_version]
+    if not discard_data:
+        for version in to_revert:
+            for table in PROTECTED_BY_MIGRATION.get(version, ()):
+                count = int(database.fetchall(f"SELECT COUNT(*) FROM {table}")[0][0])
+                if count:
+                    raise StorageError(
+                        f"revertir la migración {version} borraría {count} fila(s) de {table}; "
+                        "confirme la pérdida con discard_data=True"
+                    )
     for version in to_revert:
         migration = known.get(version)
         if migration is None:

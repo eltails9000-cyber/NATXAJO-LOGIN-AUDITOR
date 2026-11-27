@@ -17,6 +17,7 @@ from typing import Final
 from natxajo_auditor.core.contracts import (
     CLEANUP_PERMISSION,
     DIAGNOSTIC_PERMISSION,
+    EVENT_REQUEUE_PERMISSION,
     PLATFORM_COMPANY,
     OperationGate,
 )
@@ -91,17 +92,41 @@ class MaintenanceService:
             paths = plan_cleanup(
                 self._managed, now=self._clock(), older_than=timedelta(hours=hours)
             )
-            removed = apply_cleanup(paths, self._managed)
+            result = apply_cleanup(paths, self._managed)
             self._audit.record(
                 EVENT_CLEANUP,
-                {"removed": removed},
+                {"removed": len(result.removed), "failed": len(result.failed)},
                 company_id=PLATFORM_COMPANY,
                 actor=username,
             )
-            return {"planeados": len(paths), "eliminados": removed}
+            return {
+                "planeados": len(paths),
+                "eliminados": len(result.removed),
+                "fallidos": len(result.failed),
+                "detalle_fallidos": [
+                    {"archivo": path.name, "motivo": reason} for path, reason in result.failed
+                ],
+            }
 
         return self._gate.run(
             token, CLEANUP_PERMISSION, operation, confirmed=confirmed, company_id=None
+        )
+
+    def requeue_event(self, token: str, event_id: str, *, confirmed: bool) -> None:
+        """Devuelve a la cola un evento fallido. Solo API: la terminal y la interfaz no lo ofrecen.
+
+        Es una operación crítica: exige confirmación y reautenticación reciente. Queda constancia en
+        la auditoría con el usuario que lo hizo.
+        """
+        if not isinstance(event_id, str) or not 1 <= len(event_id) <= 64:
+            raise ValidationError("el identificador del evento no es válido")
+
+        def operation() -> None:
+            username = self._gate.username_for(token)
+            self._outbox.requeue_event(event_id, audit=self._audit, actor=username)
+
+        self._gate.run(
+            token, EVENT_REQUEUE_PERMISSION, operation, confirmed=confirmed, company_id=None
         )
 
     def _checks(self) -> list[Check]:

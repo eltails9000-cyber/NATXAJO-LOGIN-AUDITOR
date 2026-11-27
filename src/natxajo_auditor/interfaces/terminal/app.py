@@ -134,12 +134,21 @@ def _install(console: Console) -> bool:
     return False
 
 
+# Mismo texto que security.accounts.INVALID_CREDENTIALS. La terminal no importa la seguridad.
+LOGIN_REFUSED = "credenciales no válidas"
+
+
 def _login(console: Console) -> bool:
     for _ in range(MAX_LOGIN_ATTEMPTS):
         username = console.read("Usuario: ").strip()
         password = console.read_secret("Contraseña: ")
         try:
             console.token = console.kernel.security.login(username, password)
+        except AuthorizationError:
+            # Contraseña incorrecta, cuenta bloqueada y límite de sesiones dan el mismo texto: la
+            # terminal no debe revelar cuál es. El motivo queda en la auditoría.
+            console.write(f"Error: {LOGIN_REFUSED}")
+            continue
         except NatxajoError as exc:
             console.write(f"Error: {exc}")
             continue

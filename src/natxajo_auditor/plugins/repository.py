@@ -24,7 +24,7 @@ from natxajo_auditor.plugins.package import INTEGRITY_FILE, copy_package
 
 INDEX_FILE = "index.json"
 INDEX_FORMAT = 1
-_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 
 
 @dataclass(frozen=True)
@@ -85,7 +85,7 @@ def _parse_entry(raw: Any) -> CatalogEntry:
     relative = require_text(raw.get("path"), "path", INDEX_FILE)
     _check_relative(relative)
     digest = require_text(raw.get("sha256"), "sha256", INDEX_FILE)
-    if not _SHA256_HEX.match(digest):
+    if not _SHA256_HEX.fullmatch(digest):
         raise ValidationError(f"sha256 no válido en {INDEX_FILE}: {digest}")
     return CatalogEntry(
         plugin_id=require_identifier(raw.get("id"), "id", INDEX_FILE),

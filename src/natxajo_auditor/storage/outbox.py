@@ -11,6 +11,10 @@ Ciclo de vida de un evento:
    pendiente bloquea a los posteriores hasta resolverse o pasar a la cola de fallidos.
 4. Tras MAX_ATTEMPTS fallos el evento pasa a `dead`. Se puede reencolar con requeue_dead().
 5. Al arrancar el núcleo se reintentan los eventos pendientes que quedaron sin entregar.
+
+Cada base de datos tiene un único bus por proceso (el del núcleo). Dos instancias sobre la misma
+tabla se reparten las entregas: una marca como entregado un evento que el consumidor de la otra
+nunca recibió. Por eso AuditLog debe recibir el bus compartido cuando hay consumidores propios.
 """
 
 from __future__ import annotations
@@ -124,6 +128,23 @@ class Consumer(Protocol):
     def handle(self, event: Event, connection: sqlite3.Connection) -> None: ...
 
 
+class AuditRecorder(Protocol):
+    """Lo que el bus necesita de la auditoría para dejar constancia de un reencolado.
+
+    Lo cumple AuditLog. Se declara aquí para que el bus no importe la auditoría, que a su vez
+    depende del bus.
+    """
+
+    def record(
+        self,
+        event_type: str,
+        payload: Mapping[str, Any],
+        connection: sqlite3.Connection | None = None,
+        *,
+        actor: str | None = None,
+    ) -> None: ...
+
+
 @dataclass(frozen=True)
 class DispatchReport:
     delivered: int = 0
@@ -204,15 +225,44 @@ class EventOutbox:
             for row in rows
         ]
 
-    def requeue_dead(self) -> int:
-        """Devuelve a la cola los eventos fallidos, con el contador de intentos a cero."""
+    def requeue_event(self, event_id: str, *, audit: AuditRecorder, actor: str) -> None:
+        """Devuelve a la cola un evento fallido. El evento no se borra.
+
+        Cambio y constancia van en la misma transacción: si la auditoría falla, el evento no se
+        reencola. Quien ya recibió el evento no lo recibe otra vez: la entrega es idempotente.
+        """
         with self._database.transaction() as connection:
-            cursor = connection.execute(
-                "UPDATE event_outbox SET status = ?, attempts = 0, last_error = NULL "
-                "WHERE status = ?",
-                (PENDING, DEAD),
+            rows = connection.execute(
+                "SELECT status, name FROM event_outbox WHERE event_id = ?", (event_id,)
+            ).fetchall()
+            if not rows:
+                raise ValidationError("evento no encontrado")
+            status, name = rows[0]
+            if status != DEAD:
+                raise ValidationError("solo se reencolan eventos fallidos")
+            connection.execute(
+                "UPDATE event_outbox SET status = ?, attempts = 0, last_error = NULL, "
+                "requeues = requeues + 1, last_requeued_at = ? WHERE event_id = ?",
+                (PENDING, to_iso(self._clock()), event_id),
             )
-            return int(cursor.rowcount)
+            audit.record(
+                "event.requeued",
+                {"event_id": event_id, "name": str(name)},
+                connection=connection,
+                actor=actor,
+            )
+
+    def requeue_dead(self, *, audit: AuditRecorder, actor: str) -> int:
+        """Reencola todos los eventos fallidos, uno a uno y con su constancia en la auditoría."""
+        identifiers = [
+            str(row[0])
+            for row in self._database.fetchall(
+                "SELECT event_id FROM event_outbox WHERE status = ? ORDER BY seq", (DEAD,)
+            )
+        ]
+        for event_id in identifiers:
+            self.requeue_event(event_id, audit=audit, actor=actor)
+        return len(identifiers)
 
     def _dispatch(self) -> DispatchReport:
         delivered = failed = dead = 0

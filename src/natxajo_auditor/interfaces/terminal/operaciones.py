@@ -179,9 +179,11 @@ def report_verify(console: Console) -> None:
     problems = 0
     for item in results:
         state = item["estado"]
-        if state != "correcto":
+        signature = item["firma"]
+        # Un informe sin firma (anterior a la firma) no es un problema; una firma inválida sí.
+        if state != "correcto" or signature in ("firma_no_valida", "no_legible"):
             problems += 1
-        console.write(f"- {item['ruta']} | {state}")
+        console.write(f"- {item['ruta']} | {state} | firma: {signature}")
     console.write(
         "Verificación correcta" if problems == 0 else f"Problemas encontrados: {problems}"
     )
@@ -225,6 +227,10 @@ def maintenance_cleanup(console: Console) -> None:
         console.token, older_than_hours=hours, confirmed=True
     )
     console.write(f"Eliminados: {result['eliminados']} de {result['planeados']} planeados")
+    if result["fallidos"]:
+        console.write(
+            f"No se pudieron eliminar {result['fallidos']} archivo(s): revise sus permisos"
+        )
 
 
 def rules_list(console: Console) -> None:

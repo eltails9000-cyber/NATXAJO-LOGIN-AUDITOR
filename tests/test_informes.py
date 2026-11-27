@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import csv
+import errno
 import hashlib
 import io
 import json
+import os
 import re
+import secrets
+import stat
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,10 +21,17 @@ import pytest
 from natxajo_auditor.auditing.catalog import Severity, Status
 from natxajo_auditor.auditing.engine import Outcome
 from natxajo_auditor.auditing.results import AuditRun
-from natxajo_auditor.core.exceptions import AuthorizationError, ValidationError
+from natxajo_auditor.core import ed25519
+from natxajo_auditor.core.exceptions import (
+    AuthorizationError,
+    StorageError,
+    ValidationError,
+)
 from natxajo_auditor.kernel.context import RuntimeContext
 from natxajo_auditor.kernel.kernel import SERVICE_DATABASE, Kernel
+from natxajo_auditor.reporting import service as reporting_service
 from natxajo_auditor.reporting.formats import FORMATS, ReportMeta, render
+from natxajo_auditor.reporting.signing import KEY_FILE, ReportSigner
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.database import Database
 from tests.auditoria_datos import GOOD, WEAK, copy_of
@@ -170,7 +181,12 @@ def test_an_export_writes_a_file_registers_its_digest_and_verifies_clean(
     history = world.reports.history(platform_token, "acme")
     assert [item["evaluacion"] for item in history] == [run_id]
     assert world.reports.verify(platform_token, "acme") == [
-        {"id": exported["id"], "ruta": exported["ruta"], "estado": "correcto"}
+        {
+            "id": exported["id"],
+            "ruta": exported["ruta"],
+            "estado": "correcto",
+            "firma": "firmado_valido",
+        }
     ]
     events = world.audit.events_of_type("report.exported")
     assert len(events) == 1
@@ -277,3 +293,103 @@ def test_reports_are_written_under_a_folder_with_spaces_and_unicode(tmp_path: Pa
         assert (context.reports_dir / str(exported["ruta"])).is_file()
     finally:
         kernel.stop()
+
+
+# --- Firma de informes (Ed25519) ---------------------------------------------------------------
+
+
+def _signed_export(world: Kernel, token: str) -> dict[str, object]:
+    run_id = _evaluate(world, token, "acme", copy_of(GOOD))
+    return world.reports.export(token, "acme", run_id, "json")
+
+
+def _sidecar(world: Kernel, exported: dict[str, object]) -> Path:
+    return world.context.reports_dir / (str(exported["ruta"]) + ".firma.json")
+
+
+def _states(world: Kernel, token: str) -> dict[str, tuple[str, str]]:
+    return {
+        str(item["ruta"]): (str(item["estado"]), str(item["firma"]))
+        for item in world.reports.verify(token, "acme")
+    }
+
+
+def test_a_new_report_is_signed_and_verifies_without_being_an_orphan(
+    world: Kernel, platform_token: str
+) -> None:
+    exported = _signed_export(world, platform_token)
+    assert exported["firma"] == "firmado_valido"
+    sidecar = json.loads(_sidecar(world, exported).read_text(encoding="utf-8"))
+    assert set(sidecar) == {"algoritmo", "clave_publica", "firma"}
+    assert sidecar["algoritmo"] == "Ed25519"
+    assert _states(world, platform_token) == {str(exported["ruta"]): ("correcto", "firmado_valido")}
+    key = world.context.storage_dir / KEY_FILE
+    assert key.is_file()
+    if os.name == "posix":
+        assert stat.S_IMODE(key.stat().st_mode) == 0o600
+
+
+def test_a_changed_report_is_not_valid(world: Kernel, platform_token: str) -> None:
+    exported = _signed_export(world, platform_token)
+    with (world.context.reports_dir / str(exported["ruta"])).open("ab") as handle:
+        handle.write(b" ")
+    assert _states(world, platform_token)[str(exported["ruta"])] == ("alterado", "firma_no_valida")
+
+
+def test_a_signature_made_with_another_key_is_rejected(world: Kernel, platform_token: str) -> None:
+    exported = _signed_export(world, platform_token)
+    content = (world.context.reports_dir / str(exported["ruta"])).read_bytes()
+    intruso = secrets.token_bytes(32)
+    forged = {
+        "algoritmo": "Ed25519",
+        "clave_publica": ed25519.public_key(intruso).hex(),
+        "firma": ed25519.sign(intruso, content).hex(),
+    }
+    _sidecar(world, exported).write_text(json.dumps(forged), encoding="utf-8")
+    assert _states(world, platform_token)[str(exported["ruta"])] == ("correcto", "firma_no_valida")
+
+
+def test_a_stored_hash_is_not_a_signature(world: Kernel, platform_token: str) -> None:
+    exported = _signed_export(world, platform_token)
+    solo_hash = {"algoritmo": "Ed25519", "sha256": exported["sha256"]}
+    _sidecar(world, exported).write_text(json.dumps(solo_hash), encoding="utf-8")
+    assert _states(world, platform_token)[str(exported["ruta"])] == ("correcto", "no_legible")
+
+
+def test_reports_exported_before_signing_are_unsigned_but_still_checked(
+    world: Kernel, platform_token: str
+) -> None:
+    exported = _signed_export(world, platform_token)
+    _sidecar(world, exported).unlink()
+    assert _states(world, platform_token)[str(exported["ruta"])] == ("correcto", "sin_firma")
+
+
+def test_a_failed_signature_write_leaves_no_report_and_no_row(
+    world: Kernel, platform_token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_id = _evaluate(world, platform_token, "acme", copy_of(GOOD))
+
+    def sin_espacio(path: Path, text: str) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(reporting_service, "atomic_write_text", sin_espacio)
+    with pytest.raises(OSError):
+        world.reports.export(platform_token, "acme", run_id, "json")
+    assert list((world.context.reports_dir / "acme").glob("informe-*")) == []
+    assert _count(world, "report_exports") == 0
+
+
+def test_the_signing_key_is_created_once_and_never_overwritten(tmp_path: Path) -> None:
+    key = tmp_path / KEY_FILE
+    primera = ReportSigner(key).sign(b"uno")
+    original = key.read_text(encoding="ascii")
+    segunda = ReportSigner(key).sign(b"dos")
+    assert primera["clave_publica"] == segunda["clave_publica"]
+    assert key.read_text(encoding="ascii") == original
+
+
+def test_an_unreadable_signing_key_is_a_storage_error(tmp_path: Path) -> None:
+    key = tmp_path / KEY_FILE
+    key.write_text("no es hexadecimal", encoding="ascii")
+    with pytest.raises(StorageError, match="no es legible"):
+        ReportSigner(key).sign(b"x")

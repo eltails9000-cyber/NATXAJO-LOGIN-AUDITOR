@@ -96,8 +96,25 @@ La prueba `test_verification_detects_altered_missing_and_orphan_files` cubre `al
 escape en HTML, exportación con permisos y aislamiento entre empresas, fallo a mitad de exportación sin
 archivo ni fila, verificación de los cinco estados y rutas con espacios y caracteres Unicode.
 
+## Firma de los informes
+
+Cada informe nuevo se firma con Ed25519 y la firma se guarda en un archivo `<informe>.firma.json`
+junto al informe. La clave `firma_informes.clave` está en la carpeta de almacenamiento. Se crea una
+vez, nunca se sobrescribe y tiene permisos 0600 en sistemas POSIX; en Windows no hay una protección
+equivalente.
+
+La verificación distingue cuatro estados:
+
+- `firmado_valido`: la firma corresponde al informe y a la clave de esta instalación.
+- `sin_firma`: informe exportado antes de la firma. Se comprueba su huella, pero no tiene firma.
+- `firma_no_valida`: el informe cambió, la firma es de otra clave o el archivo de firma no encaja.
+- `no_legible`: el informe o su firma no se pueden leer.
+
+Límite: la clave vive en el mismo equipo que los informes. La firma demuestra que nadie modificó el
+informe sin acceso a esa clave; no demuestra nada frente a quien controle la máquina.
+
 ## Pendiente
 
 - Formato PDF.
-- Firma digital de los informes. Hoy solo hay huella SHA-256 y registro de la exportación.
 - Informes de auditorías activas: no existen porque el motor no hace pruebas activas.
+- Firma con clave externa a la máquina, que daría una garantía frente al propio equipo.

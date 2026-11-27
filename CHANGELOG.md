@@ -2,6 +2,53 @@
 
 ## [Sin publicar]
 
+- Etapa 4.1: endurecimiento posterior a la fusión de la etapa 4 (rama
+  `etapa-4-1-endurecimiento`).
+  - Sesiones: visitantes anónimos (256) y sesiones autenticadas (64) tienen límites separados. Con
+    el grupo lleno se rechaza la entrada (503) en lugar de expulsar a otra sesión. Un límite por
+    cuenta se audita como `session.limit_reached`.
+  - Entrada: las credenciales incorrectas y el límite por cuenta dan la misma respuesta (401
+    `credenciales`). La instalación pendiente sigue en 409.
+  - Guardián: `operation.denied`, `operation.executed` y `operation.failed`, sin contraseñas ni
+    valores; solo el tipo de error. Un fallo al auditar no oculta el resultado de la operación.
+  - Limpieza: un archivo que no se puede borrar no detiene la limpieza ni cuenta como eliminado.
+    Evento `maintenance.cleanup_applied` con `removed` y `failed`.
+  - Diagnóstico y copias: cada comprobación se aísla y su fallo aparece como error. Una copia que
+    falla al crearse no deja archivos a medias; un manifiesto o una copia ilegibles son un problema
+    devuelto, no una excepción.
+  - Plugins: una revisión solo vale para el SHA-256, el editor y la versión revisados (migración
+    12). Las aprobaciones anteriores no autorizan nada: hay que volver a revisar los plugins de
+    terceros. Evento `plugin.reviewed`.
+  - Auditoría inmutable: los eventos y las revisiones no se modifican ni se borran (disparadores,
+    migración 12).
+  - Informes firmados con Ed25519 (`firma_informes.clave`, archivo `.firma.json`). Los informes
+    anteriores quedan sin firma y se verifican solo por huella.
+  - Validación de identificadores con `fullmatch`: un salto de línea final ya no pasa.
+  - Panel del sistema: solo la plataforma ve el detalle técnico; las empresas ven la versión.
+  - Eventos fallidos: reencolado controlado (`requeue_event`, `requeue_dead`), solo por la API de
+    la plataforma, con confirmación y reautenticación. Evento `event.requeued`. Migración 13
+    (contadores de reencolado). Solo API: la terminal y la interfaz no lo ofrecen.
+  - Restauración de configuración con guardián: `kernel.configuration_service.restore`. Permiso
+    crítico `configuracion:nucleo:restauracion:ejecutar` y evento `configuration.restored`.
+  - Cambio de roles con guardián: `kernel.security.change_roles`, solo para la plataforma, con
+    confirmación y reautenticación. `set_roles` acepta `actor` para la auditoría.
+  - Terminal: un inicio rechazado muestra siempre `credenciales no válidas`, incluido el límite de
+    sesiones y la cuenta bloqueada. Antes el límite tenía su propio texto y permitía comprobar
+    contraseñas contra una cuenta llena. El motivo queda en la auditoría.
+  - Pruebas de concurrencia: varios hilos con su propia conexión comprueban que el límite de
+    sesiones por cuenta no se supera al iniciar sesión a la vez.
+  - Cambios incompatibles:
+    - La terminal muestra el mismo texto para las tres causas de rechazo (ver arriba).
+    - `PluginManager.record_review` exige `reviewed_sha256` y acepta `confirmed`.
+    - `MaintenanceService.apply_cleanup` devuelve `planeados`, `eliminados`, `fallidos` y
+      `detalle_fallidos`.
+    - `EventOutbox.requeue_dead` exige `audit` y `actor`.
+    - `rollback_migrations` exige `discard_data=True` para revertir una migración con filas
+      protegidas (migraciones 10, 11 y 12).
+    - La base de datos llega a la versión 13.
+    - `ReadModels.system_info` exige el token de la sesión.
+    - `ReportService` recibe un firmante.
+
 - Interfaz gráfica local (`python main.py --gui`): panel, auditoría, usuarios, sesiones,
   plugins, módulos, reportes, eventos, seguridad, mantenimiento y configuración. Servidor en
   127.0.0.1 con biblioteca estándar, sin CDN ni dependencias nuevas. Operaciones existentes

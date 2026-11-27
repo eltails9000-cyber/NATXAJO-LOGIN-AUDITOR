@@ -76,8 +76,10 @@ pantalla de acceso lo indica y pide completarla en la terminal.
 - **Operaciones críticas.** Requieren confirmación explícita y una reautenticación reciente, de
   cinco minutos. El inicio de sesión no cuenta como reautenticación. La interfaz muestra la
   confirmación antes de llamar al núcleo y pide la contraseña cuando el núcleo la exige.
-- **Límite de sesiones.** Si la cuenta ya tiene el máximo de sesiones abiertas, la interfaz lo
-  indica como tal. No se presenta como contraseña incorrecta.
+- **Límite de sesiones.** Si la cuenta ya tiene el máximo de sesiones abiertas, la interfaz responde
+  igual que ante una contraseña incorrecta, para que nadie pueda comprobar contraseñas contra una
+  cuenta llena. El motivo queda en la auditoría. Quien recibe ese mensaje con la contraseña correcta
+  debe cerrar una sesión abierta de la cuenta y volver a entrar.
 - **Ruta de actualización de plugins.** La carpeta la escribe el operador. El núcleo la valida
   igual que en la terminal (firma, editor, versión y copia verificada) antes de cambiar nada.
 
@@ -105,6 +107,7 @@ pantalla de acceso lo indica y pide completarla en la terminal.
 
 - No se ha probado en Windows ni con la aplicación instalada desde un wheel en esa plataforma.
 - No hay ventana nativa: el resultado depende del navegador del equipo.
-- Sin revocación de sesiones, altas de usuarios, instalación de plugins ni habilitación de plugins
-  desde la interfaz. Esas operaciones siguen en la terminal.
+- Sin revocación de sesiones, altas de usuarios ni cambios de cuenta desde la interfaz: esas
+  operaciones siguen en la terminal. La instalación y la habilitación de plugins no existen todavía
+  ni en la interfaz ni en la terminal.
 - Los gráficos son SVG sencillos (dona y barras), sin librerías externas.

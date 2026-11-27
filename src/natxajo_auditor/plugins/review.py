@@ -6,6 +6,7 @@ No detecta código malicioso y no sustituye la revisión humana ni el aislamient
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -33,6 +34,7 @@ EXECUTABLE_SUFFIXES: frozenset[str] = frozenset(
     }
 )
 REVIEW_DECISIONS: frozenset[str] = frozenset({"approved", "rejected"})
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 @dataclass(frozen=True)
@@ -61,27 +63,54 @@ class ReviewLog:
         self._database = database
 
     def record(
-        self, plugin_id: str, version: str, reviewer: str, decision: str, findings: str
+        self,
+        plugin_id: str,
+        version: str,
+        publisher_key_id: str,
+        integrity_sha256: str,
+        reviewer: str,
+        decision: str,
+        findings: str,
     ) -> None:
+        """Registra una decisión ligada al editor, la versión y el SHA-256 del paquete revisado."""
         if decision not in REVIEW_DECISIONS:
             raise ValidationError(f"decisión de revisión no válida: {decision}")
         require_text(reviewer, "revisor", "revisión")
+        if _SHA256.fullmatch(integrity_sha256) is None:
+            raise ValidationError("el SHA-256 de la revisión no es válido")
         self._database.execute(
-            "INSERT INTO plugin_reviews (plugin_id, version, reviewer, decision, findings) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (plugin_id, version, reviewer, decision, findings),
+            "INSERT INTO plugin_reviews (plugin_id, version, publisher_key_id, integrity_sha256, "
+            "reviewer, decision, findings) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                plugin_id,
+                version,
+                publisher_key_id,
+                integrity_sha256,
+                reviewer,
+                decision,
+                findings,
+            ),
         )
 
-    def latest_decision(self, plugin_id: str, version: str) -> str | None:
+    def latest_decision(
+        self, plugin_id: str, version: str, publisher_key_id: str, integrity_sha256: str
+    ) -> str | None:
+        """Última decisión para exactamente este editor, versión y contenido. Otro contenido,
+        aunque tenga el mismo identificador y versión, no hereda la decisión."""
         rows = self._database.fetchall(
             "SELECT decision FROM plugin_reviews WHERE plugin_id = ? AND version = ? "
-            "ORDER BY id DESC LIMIT 1",
-            (plugin_id, version),
+            "AND publisher_key_id = ? AND integrity_sha256 = ? ORDER BY id DESC LIMIT 1",
+            (plugin_id, version, publisher_key_id, integrity_sha256),
         )
         return str(rows[0][0]) if rows else None
 
-    def is_approved(self, plugin_id: str, version: str) -> bool:
-        return self.latest_decision(plugin_id, version) == "approved"
+    def is_approved(
+        self, plugin_id: str, version: str, publisher_key_id: str, integrity_sha256: str
+    ) -> bool:
+        return (
+            self.latest_decision(plugin_id, version, publisher_key_id, integrity_sha256)
+            == "approved"
+        )
 
     def history(self, plugin_id: str, version: str) -> list[dict[str, Any]]:
         rows = self._database.fetchall(

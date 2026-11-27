@@ -84,8 +84,8 @@ Lo que el sistema hace cuando algo se interrumpe, y dónde está probado:
 | Reversión de migraciones con SQLite antiguo | Se comprueba la versión antes de cambiar nada | `test_the_rollback_checks_the_sqlite_version_before_changing_anything` |
 
 No existe una herramienta general de reparación automática. Una base dañada se diagnostica con la
-opción 26. La restauración desde una copia se hace por la API (`kernel.backups.restore`), porque la
-terminal todavía no la expone.
+opción 26. La restauración desde una copia de la base de datos no está expuesta: `kernel.backups`
+tiene `restore`, pero sin guardián ni llamadores, y restaurar sobre la base viva sobrescribiría datos.
 
 ## Restauración de copias
 

@@ -55,25 +55,43 @@ class SessionStore:
         token = secrets.token_urlsafe(32)
         # El recuento y la inserción van en la misma transacción de escritura: dos inicios
         # simultáneos no pueden superar el límite leyendo el mismo número de sesiones.
+        full = False
         with self._database.transaction() as connection:
             if len(self._live_rows(username, now)) >= MAX_CONCURRENT_SESSIONS:
-                raise SessionLimitError(
-                    f"máximo de {MAX_CONCURRENT_SESSIONS} sesiones simultáneas alcanzado; "
-                    "cierre una sesión"
+                full = True
+            else:
+                connection.execute(
+                    "INSERT INTO sessions (token_hash, username, created_at, last_activity, "
+                    "expires_at) VALUES (?, ?, ?, ?, ?)",
+                    (
+                        _digest(token),
+                        username,
+                        to_iso(now),
+                        to_iso(now),
+                        to_iso(now + ABSOLUTE_TIMEOUT),
+                    ),
                 )
-            connection.execute(
-                "INSERT INTO sessions (token_hash, username, created_at, last_activity, "
-                "expires_at) VALUES (?, ?, ?, ?, ?)",
-                (
-                    _digest(token),
-                    username,
-                    to_iso(now),
-                    to_iso(now),
-                    to_iso(now + ABSOLUTE_TIMEOUT),
-                ),
+                self._audit.record("session.opened", {"username": username}, connection=connection)
+        if full:
+            # Fuera de la transacción: el error la revertiría y el rechazo no quedaría registrado.
+            self._audit.record("session.limit_reached", {"username": username})
+            raise SessionLimitError(
+                f"máximo de {MAX_CONCURRENT_SESSIONS} sesiones simultáneas alcanzado; "
+                "cierre una sesión"
             )
-            self._audit.record("session.opened", {"username": username}, connection=connection)
         return token
+
+    def is_live(self, token: str) -> bool:
+        """Indica si la ficha sigue vigente. Es de solo lectura: no renueva la actividad."""
+        now = self._clock()
+        rows = self._database.fetchall(
+            "SELECT last_activity, expires_at, revoked_at FROM sessions WHERE token_hash = ?",
+            (_digest(token),),
+        )
+        if not rows:
+            return False
+        last_activity, expires_at, revoked = rows[0]
+        return revoked is None and _is_live(str(last_activity), str(expires_at), now)
 
     def validate(self, token: str) -> Session:
         """Comprueba la sesión y renueva su actividad. Lanza SessionError si no es válida."""

@@ -24,7 +24,7 @@ from natxajo_auditor.security.roles import ADMINISTRATOR, check_separation
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.database import Database
 
-USERNAME = re.compile(r"^[a-z][a-z0-9_.-]{2,39}$")
+USERNAME = re.compile(r"[a-z][a-z0-9_.-]{2,39}")
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT = timedelta(minutes=15)
 INVALID_CREDENTIALS = "credenciales no válidas"
@@ -128,7 +128,7 @@ class AccountStore:
         self, username: str, password: str, roles: Iterable[str], company_id: str
     ) -> tuple[str, ...]:
         """Valida una cuenta nueva sin escribir nada. Devuelve los roles sin repetir."""
-        if not USERNAME.match(username):
+        if not USERNAME.fullmatch(username):
             raise ValidationError(
                 f"nombre de usuario no válido: {username} (minúsculas, dígitos, punto, guion y "
                 "guion bajo; de 3 a 40 caracteres)"
@@ -273,8 +273,14 @@ class AccountStore:
                 "account.password_changed", {"username": username}, connection=connection
             )
 
-    def set_roles(self, username: str, roles: Iterable[str]) -> Account:
-        """Sustituye los roles de una cuenta. Se aplica la separación de funciones."""
+    def set_roles(
+        self, username: str, roles: Iterable[str], *, actor: str | None = None
+    ) -> Account:
+        """Sustituye los roles de una cuenta. Se aplica la separación de funciones.
+
+        Vía interna: no comprueba quién la pide. `actor` deja constancia en la auditoría de quién
+        hizo el cambio; la comprobación la hace SecurityService.change_roles.
+        """
         account = self.get(username)
         role_names = tuple(dict.fromkeys(roles))
         if not role_names:
@@ -296,6 +302,7 @@ class AccountStore:
                 "account.roles_changed",
                 {"username": username, "roles": list(role_names)},
                 connection=connection,
+                actor=actor,
             )
         return self.get(username)
 

@@ -9,6 +9,8 @@ la transacción falla, el archivo se borra. Si la escritura falla, queda un regi
 
 from __future__ import annotations
 
+import contextlib
+import json
 import uuid
 from pathlib import Path
 from typing import Final
@@ -25,11 +27,19 @@ from natxajo_auditor.core.exceptions import NatxajoError, ValidationError
 from natxajo_auditor.core.utilities import (
     Clock,
     atomic_write_bytes,
+    atomic_write_text,
     sha256_bytes,
     sha256_file,
     to_iso,
 )
 from natxajo_auditor.reporting.formats import FORMATS, ReportMeta, render
+from natxajo_auditor.reporting.signing import (
+    SIGNATURE_SUFFIX,
+    SIGNED,
+    UNREADABLE,
+    ReportSigner,
+    signature_path,
+)
 from natxajo_auditor.storage.audit import AuditLog
 from natxajo_auditor.storage.database import Database
 
@@ -48,6 +58,7 @@ class ReportService:
         clock: Clock,
         reports_dir: Path,
         platform_version: str,
+        signer: ReportSigner,
     ) -> None:
         self._database = database
         self._audit = audit
@@ -55,6 +66,7 @@ class ReportService:
         self._clock = clock
         self._reports_dir = reports_dir
         self._platform_version = platform_version
+        self._signer = signer
         self._evaluations = AuditStore(database)
 
     def export(self, token: str, company_id: str, run_id: str, fmt: str) -> dict[str, object]:
@@ -126,7 +138,9 @@ class ReportService:
         relative = f"{company_id}/{name}"
         target = self._reports_dir / company_id / name
         try:
+            signature = json.dumps(self._signer.sign(content), ensure_ascii=False, indent=2)
             atomic_write_bytes(target, content)
+            atomic_write_text(signature_path(target), signature)
             with self._database.transaction() as connection:
                 connection.execute(
                     "INSERT INTO report_exports (id, run_id, company_id, format, username, "
@@ -152,8 +166,10 @@ class ReportService:
                     actor=username,
                 )
         except BaseException as exc:
-            # El identificador es nuevo: el archivo que se borra es el que acabamos de escribir.
+            # El identificador es nuevo: los archivos que se borran son los que acabamos de escribir.
             target.unlink(missing_ok=True)
+            with contextlib.suppress(OSError):
+                signature_path(target).unlink(missing_ok=True)
             self._audit.record(
                 EVENT_FAILED,
                 {"run_id": run.run_id, "format": fmt, "reason": _reason(exc)},
@@ -170,6 +186,7 @@ class ReportService:
             "sha256": digest,
             "bytes": len(content),
             "creado": meta.generated_at,
+            "firma": SIGNED,
         }
 
     def _verify(self, company_id: str) -> list[dict[str, object]]:
@@ -182,20 +199,31 @@ class ReportService:
         registered: set[str] = set()
         for report_id, relative, digest, size in rows:
             registered.add(str(relative))
+            state = self._file_state(str(relative), str(digest), int(size))
+            firma = self._signature_state(str(relative), state)
             findings.append(
                 {
                     "id": report_id,
                     "ruta": relative,
-                    "estado": self._file_state(str(relative), str(digest), int(size)),
+                    "estado": state,
+                    "firma": firma,
                 }
             )
         company_dir = self._reports_dir / company_id
         if company_dir.is_dir():
             for path in sorted(company_dir.glob(f"{FILE_PREFIX}*")):
                 relative = f"{company_id}/{path.name}"
+                if path.name.endswith(SIGNATURE_SUFFIX):
+                    continue
                 if relative not in registered and path.is_file():
                     findings.append({"id": "", "ruta": relative, "estado": "huerfano"})
         return findings
+
+    def _signature_state(self, relative: str, state: str) -> str:
+        """Estado de la firma. Un archivo fuera de la carpeta de informes no se abre."""
+        if state == "fuera_de_carpeta":
+            return UNREADABLE
+        return self._signer.check(self._reports_dir / relative)
 
     def _file_state(self, relative: str, digest: str, size: int) -> str:
         path = (self._reports_dir / relative).resolve()
@@ -210,7 +238,7 @@ class ReportService:
 
 
 def _check_company(company_id: str) -> None:
-    if not isinstance(company_id, str) or COMPANY_ID.match(company_id) is None:
+    if not isinstance(company_id, str) or COMPANY_ID.fullmatch(company_id) is None:
         raise ValidationError("el identificador de empresa no es válido")
 
 
