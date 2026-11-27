@@ -34,6 +34,8 @@ DOMAIN_SERVICES = (
     "auditing",
     "reports",
     "maintenance",
+    # Restauración de configuración con guardián: comparte el guardián y la auditoría.
+    "configuration_service",
 )
 ALL_SERVICES = {"database", "outbox", "audit", *DOMAIN_SERVICES}
 

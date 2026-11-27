@@ -23,6 +23,7 @@ from natxajo_auditor.kernel.composition import (
     AUDITING,
     BACKUPS,
     CONFIGURATION,
+    CONFIGURATION_SERVICE,
     DATABASE,
     DEFAULT_PASSWORD_ITERATIONS,
     MAINTENANCE,
@@ -51,6 +52,7 @@ from natxajo_auditor.kernel.service_container import ServiceContainer
 if TYPE_CHECKING:
     from natxajo_auditor.auditing.service import AuditingService
     from natxajo_auditor.configuration.manager import ConfigurationManager
+    from natxajo_auditor.configuration.service import ConfigurationService
     from natxajo_auditor.maintenance.service import MaintenanceService
     from natxajo_auditor.modules.manager import ModuleManager
     from natxajo_auditor.plugins.manager import PluginManager
@@ -143,6 +145,11 @@ class Kernel:
     @property
     def configuration(self) -> ConfigurationManager:
         return self.services.fetch(CONFIGURATION)
+
+    @property
+    def configuration_service(self) -> ConfigurationService:
+        """Restauración de configuración con guardián. El gestor directo no comprueba permisos."""
+        return self.services.fetch(CONFIGURATION_SERVICE)
 
     @property
     def outbox(self) -> EventOutbox:

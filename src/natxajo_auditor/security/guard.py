@@ -21,6 +21,7 @@ from typing import TypeVar
 
 from natxajo_auditor.core.contracts import (
     CLEANUP_PERMISSION,
+    CONFIGURATION_RESTORE_PERMISSION,
     EVENT_REQUEUE_PERMISSION,
     PLUGIN_QUARANTINE_RELEASE_PERMISSION,
     PLUGIN_VERSION_PERMISSION,
@@ -51,6 +52,8 @@ CRITICAL_PERMISSIONS: frozenset[str] = frozenset(
         CLEANUP_PERMISSION,
         # Vuelve a entregar un evento fallido: exige confirmación y reautenticación.
         EVENT_REQUEUE_PERMISSION,
+        # Sustituye la configuración de todo el sistema: exige confirmación y reautenticación.
+        CONFIGURATION_RESTORE_PERMISSION,
         # Cambian qué versión de un plugin puede habilitarse: exigen confirmación y reautenticación.
         PLUGIN_VERSION_PERMISSION,
         PLUGIN_QUARANTINE_RELEASE_PERMISSION,

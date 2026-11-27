@@ -87,6 +87,7 @@ CATALOG: Mapping[str, EventSpec] = {
     "report.failed": _spec(_OP, "run_id format reason"),
     "maintenance.cleanup_applied": _spec(_OP, "removed", "failed"),
     "event.requeued": _spec(_SEC, "event_id name"),
+    "configuration.restored": _spec(_SEC, "archivo"),
     "plugin.quarantined": _spec(_SEC, "plugin version reason username"),
     "plugin.quarantine_released": _spec(_SEC, "plugin version username"),
     "plugin.updated": _spec(_OP, "plugin from to publisher username"),

@@ -273,8 +273,14 @@ class AccountStore:
                 "account.password_changed", {"username": username}, connection=connection
             )
 
-    def set_roles(self, username: str, roles: Iterable[str]) -> Account:
-        """Sustituye los roles de una cuenta. Se aplica la separación de funciones."""
+    def set_roles(
+        self, username: str, roles: Iterable[str], *, actor: str | None = None
+    ) -> Account:
+        """Sustituye los roles de una cuenta. Se aplica la separación de funciones.
+
+        Vía interna: no comprueba quién la pide. `actor` deja constancia en la auditoría de quién
+        hizo el cambio; la comprobación la hace SecurityService.change_roles.
+        """
         account = self.get(username)
         role_names = tuple(dict.fromkeys(roles))
         if not role_names:
@@ -296,6 +302,7 @@ class AccountStore:
                 "account.roles_changed",
                 {"username": username, "roles": list(role_names)},
                 connection=connection,
+                actor=actor,
             )
         return self.get(username)
 

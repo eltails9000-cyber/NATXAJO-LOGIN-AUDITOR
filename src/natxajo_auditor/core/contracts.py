@@ -26,6 +26,8 @@ CLEANUP_PERMISSION = "mantenimiento:nucleo:limpieza:ejecutar"
 # Reencola un evento fallido. Solo administradores por defecto: un evento que vuelve a entregarse
 # puede disparar efectos en los consumidores que aún no lo recibieron.
 EVENT_REQUEUE_PERMISSION = "mantenimiento:nucleo:eventos:ejecutar"
+# Restaura una copia de la configuración: sustituye ajustes que afectan a todo el sistema.
+CONFIGURATION_RESTORE_PERMISSION = "configuracion:nucleo:restauracion:ejecutar"
 
 # Plugins: estado (lectura), cuarentena (escribir, no crítica: es una medida defensiva), liberar
 # la cuarentena y cambiar de versión (ambas críticas: cambian qué código puede habilitarse).
@@ -37,6 +39,8 @@ PLUGIN_VERSION_PERMISSION = "plugins:nucleo:version:administrar"
 # Lectura de pantallas de la interfaz gráfica. Cada consulta pasa por el guardián.
 EVENT_READ_PERMISSION = "auditoria:nucleo:evento:leer"
 ACCOUNT_READ_PERMISSION = "seguridad:nucleo:cuenta:leer"
+# Cambio de roles de una cuenta. Solo la plataforma (ver SecurityService.change_roles).
+ACCOUNT_ADMIN_PERMISSION = "seguridad:nucleo:cuenta:administrar"
 SESSION_READ_PERMISSION = "seguridad:nucleo:sesion:leer"
 COMPANY_READ_PERMISSION = "seguridad:nucleo:empresa:leer"
 MODULE_READ_PERMISSION = "modulos:nucleo:modulo:leer"

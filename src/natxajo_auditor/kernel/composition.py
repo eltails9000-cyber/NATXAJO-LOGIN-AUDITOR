@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from natxajo_auditor.auditing.service import AuditingService
 from natxajo_auditor.configuration.manager import ConfigurationManager
+from natxajo_auditor.configuration.service import ConfigurationService
 from natxajo_auditor.core.utilities import Clock, utc_stamp
 from natxajo_auditor.kernel.context import RuntimeContext
 from natxajo_auditor.kernel.service_container import ServiceContainer, ServiceKey
@@ -44,6 +45,7 @@ DEFAULT_PASSWORD_ITERATIONS: int = DEFAULT_ITERATIONS
 MIN_PASSWORD_ITERATIONS: int = MIN_ITERATIONS
 
 SERVICE_CONFIGURATION = "configuration"
+SERVICE_CONFIGURATION_SERVICE = "configuration_service"
 SERVICE_DATABASE = "database"
 SERVICE_OUTBOX = "outbox"
 SERVICE_AUDIT = "audit"
@@ -62,6 +64,9 @@ OUTBOX: ServiceKey[EventOutbox] = ServiceKey(SERVICE_OUTBOX, EventOutbox)
 AUDIT: ServiceKey[AuditLog] = ServiceKey(SERVICE_AUDIT, AuditLog)
 CONFIGURATION: ServiceKey[ConfigurationManager] = ServiceKey(
     SERVICE_CONFIGURATION, ConfigurationManager
+)
+CONFIGURATION_SERVICE: ServiceKey[ConfigurationService] = ServiceKey(
+    SERVICE_CONFIGURATION_SERVICE, ConfigurationService
 )
 BACKUPS: ServiceKey[BackupManager] = ServiceKey(SERVICE_BACKUPS, BackupManager)
 MODULES: ServiceKey[ModuleManager] = ServiceKey(SERVICE_MODULES, ModuleManager)
@@ -170,5 +175,13 @@ def compose(
             gate=security.guard,
             clock=clock,
             managed_dirs=(context.config_dir, context.storage_dir, context.reports_dir),
+        ),
+    )
+    services.put(
+        CONFIGURATION_SERVICE,
+        ConfigurationService(
+            manager=services.fetch(CONFIGURATION),
+            gate=security.guard,
+            audit=audit,
         ),
     )

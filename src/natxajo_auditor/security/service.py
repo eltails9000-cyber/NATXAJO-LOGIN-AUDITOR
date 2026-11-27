@@ -4,15 +4,16 @@ instalación y el guardián.
 Es el único punto que usan el kernel y la terminal. Las piezas internas no se exponen a la
 interfaz directamente, salvo lo que la terminal necesita para presentar el menú.
 
-`create_account` es una vía interna de confianza: no comprueba quién la pide. La terminal la usa
-solo después de que el guardián haya validado la operación y su ámbito de empresa.
+`create_account` y `set_roles` son vías internas de confianza: no comprueban quién las pide. La
+terminal crea cuentas solo después de que el guardián haya validado la operación y su ámbito. Para
+cambiar roles desde fuera del proceso, usar `change_roles`, que sí pasa por el guardián.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 
-from natxajo_auditor.core.contracts import PLATFORM_COMPANY
+from natxajo_auditor.core.contracts import ACCOUNT_ADMIN_PERMISSION, PLATFORM_COMPANY
 from natxajo_auditor.core.utilities import Clock
 from natxajo_auditor.security.accounts import DISABLED, Account, AccountStore
 from natxajo_auditor.security.authorization import Authorizer
@@ -56,6 +57,34 @@ class SecurityService:
     ) -> Account:
         """Alta de cuenta en una empresa. Solo tras completar la instalación inicial."""
         return self.accounts.create(username, password, roles, company_id)
+
+    def change_roles(
+        self,
+        token: str,
+        username: str,
+        roles: Iterable[str],
+        *,
+        confirmed: bool,
+    ) -> None:
+        """Sustituye los roles de una cuenta a través del guardián.
+
+        Es de plataforma: una cuenta de empresa no concede roles, ni siquiera dentro de su empresa.
+        Es crítica: exige confirmación y reautenticación reciente. Asignar `administrador` queda
+        limitado a la plataforma por ese mismo control.
+        """
+        role_names = tuple(roles)
+
+        def operation() -> None:
+            actor = self.guard.username_for(token)
+            self.accounts.set_roles(username, role_names, actor=actor)
+
+        self.guard.run(
+            token,
+            ACCOUNT_ADMIN_PERMISSION,
+            operation,
+            confirmed=confirmed,
+            company_id=None,
+        )
 
     def login(self, username: str, password: str) -> str:
         self.accounts.check_password(username, password)
