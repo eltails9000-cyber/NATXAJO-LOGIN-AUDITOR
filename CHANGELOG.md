@@ -28,7 +28,17 @@
   - Eventos fallidos: reencolado controlado (`requeue_event`, `requeue_dead`), solo por la API de
     la plataforma, con confirmación y reautenticación. Evento `event.requeued`. Migración 13
     (contadores de reencolado). Solo API: la terminal y la interfaz no lo ofrecen.
+  - Restauración de configuración con guardián: `kernel.configuration_service.restore`. Permiso
+    crítico `configuracion:nucleo:restauracion:ejecutar` y evento `configuration.restored`.
+  - Cambio de roles con guardián: `kernel.security.change_roles`, solo para la plataforma, con
+    confirmación y reautenticación. `set_roles` acepta `actor` para la auditoría.
+  - Terminal: un inicio rechazado muestra siempre `credenciales no válidas`, incluido el límite de
+    sesiones y la cuenta bloqueada. Antes el límite tenía su propio texto y permitía comprobar
+    contraseñas contra una cuenta llena. El motivo queda en la auditoría.
+  - Pruebas de concurrencia: varios hilos con su propia conexión comprueban que el límite de
+    sesiones por cuenta no se supera al iniciar sesión a la vez.
   - Cambios incompatibles:
+    - La terminal muestra el mismo texto para las tres causas de rechazo (ver arriba).
     - `PluginManager.record_review` exige `reviewed_sha256` y acepta `confirmed`.
     - `MaintenanceService.apply_cleanup` devuelve `planeados`, `eliminados`, `fallidos` y
       `detalle_fallidos`.

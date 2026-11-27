@@ -17,8 +17,9 @@ Estos límites vienen del documento maestro y no se relajan:
 
 ## Qué está implementado hoy
 
-- **Restauraciones protegidas.** La configuración y el almacenamiento solo se restauran con
-  `authorized=True`. Una copia alterada no se restaura. Un destino existente no se sobrescribe
+- **Restauraciones protegidas.** La configuración solo se restaura a través del guardián
+  (`kernel.configuration_service`). El almacenamiento solo se restaura con `authorized=True`. Una
+  copia alterada no se restaura. Un destino existente no se sobrescribe
   sin una confirmación adicional.
 - **Auditoría.** Las activaciones de versión quedan registradas en `audit_events`, dentro de la
   misma transacción que el cambio.
@@ -166,14 +167,22 @@ Estos límites vienen del documento maestro y no se relajan:
 - **Desbloqueo.** No hay desbloqueo manual. Una cuenta bloqueada vuelve a estar disponible cuando
   caduca el bloqueo. El bloqueo es por cuenta: cualquiera con acceso a la terminal puede bloquear
   una cuenta conocida provocando cinco fallos.
-- **Configuración: restauración y reversión.** `ConfigurationManager.restore` exige `authorized=True`,
-  pero no pasa por el guardián ni deja evento de auditoría. Ninguna interfaz la llama hoy.
-- **Anti-escalada en `set_roles`.** Aplica la separación de funciones y comprueba que el rol existe,
-  pero no comprueba quién la llama ni impide asignar `administrador` desde código del proceso.
-  Ninguna interfaz la llama; solo las pruebas.
-- **Ámbito en `create_account`.** La terminal comprueba el ámbito de la empresa antes de llamar al
-  servicio. El servicio confía en quien lo llama: una llamada directa a la API no tiene esa
-  comprobación.
+- **Configuración: restauración.** Solo se restaura con `kernel.configuration_service.restore`, que
+  pasa por el guardián: permiso crítico de plataforma, confirmación, reautenticación y registro
+  `configuration.restored`. `ConfigurationManager.restore` es la vía interna que usa ese servicio.
+  No hay reversión desde el historial: sus archivos no tienen manifiesto, así que no superan la
+  verificación de copias.
+- **Cambio de roles.** `kernel.security.change_roles` pasa por el guardián: solo la plataforma, con
+  confirmación y reautenticación. Una empresa no concede roles, ni siquiera dentro de su empresa.
+  `set_roles` es la vía interna: registra el actor que se le indique, pero no comprueba quién la
+  pide.
+- **Alta de cuentas.** La terminal crea cuentas a través del guardián (permiso, ámbito,
+  confirmación y reautenticación). `create_account` es la vía interna del instalador y de las
+  pruebas, y no comprueba quién la pide.
+- **Copias de la base de datos.** `BackupManager.restore` no tiene llamadores y no se expone:
+  restaurar una copia sobre la base de datos viva sobrescribiría datos.
+- **Trazabilidad del actor.** Los cambios de estado y de contraseña de la API interna no registran
+  quién los hizo.
 - **Huella de evaluaciones.** La evaluación guarda la huella del documento, no el documento. La
   huella no se recalcula al cargarla; la integridad descansa en la inmutabilidad de `audit_runs`
   (disparadores).
