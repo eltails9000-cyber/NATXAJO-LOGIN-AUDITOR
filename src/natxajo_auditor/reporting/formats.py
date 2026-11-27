@@ -25,7 +25,8 @@ METHODOLOGY = (
     "Evaluación sin conexión de la configuración declarada en el documento de entrada. "
     "Ninguna solicitud se envía al sistema evaluado, no se prueban credenciales y no se verifica "
     "que la configuración esté aplicada en el sistema real. Cada regla compara un valor declarado "
-    "con el umbral o la lista de valores de su catálogo."
+    "con su umbral vigente: el del catálogo, o el que fija el perfil dentro de los límites de la "
+    "regla. El umbral aplicado figura en la columna de valor esperado."
 )
 CSV_HEADER: tuple[str, ...] = (
     "regla",

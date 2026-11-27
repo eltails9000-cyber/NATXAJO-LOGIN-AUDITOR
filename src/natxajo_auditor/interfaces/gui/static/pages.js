@@ -643,7 +643,7 @@
       N.pintar(main, [
         cabecera(
           "Plugins",
-          "Estado, versiones y cuarentena. Los cambios de versión y la liberación de la cuarentena son operaciones críticas. Instalar y habilitar se hace desde la terminal.",
+          "Estado, versiones y cuarentena. Los cambios de versión y la liberación de la cuarentena son operaciones críticas. Instalar y habilitar plugins todavía no está disponible en esta interfaz ni en la terminal.",
           botonRefrescar(ctx)
         ),
         zona,

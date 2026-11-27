@@ -105,6 +105,7 @@ pantalla de acceso lo indica y pide completarla en la terminal.
 
 - No se ha probado en Windows ni con la aplicación instalada desde un wheel en esa plataforma.
 - No hay ventana nativa: el resultado depende del navegador del equipo.
-- Sin revocación de sesiones, altas de usuarios, instalación de plugins ni habilitación de plugins
-  desde la interfaz. Esas operaciones siguen en la terminal.
+- Sin revocación de sesiones, altas de usuarios ni cambios de cuenta desde la interfaz: esas
+  operaciones siguen en la terminal. La instalación y la habilitación de plugins no existen todavía
+  ni en la interfaz ni en la terminal.
 - Los gráficos son SVG sencillos (dona y barras), sin librerías externas.

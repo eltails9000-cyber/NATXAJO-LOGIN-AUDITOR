@@ -86,8 +86,11 @@ Estos límites vienen del documento maestro y no se relajan:
   consumidor se ejecuta bajo un autorizador de SQLite: puede leer y escribir en tablas que no son de
   la plataforma; no puede tocar cuentas, sesiones, permisos, instalación ni el propio bus; la
   auditoría admite solo inserciones, y solo del consumidor de auditoría. Un consumidor que intente
-  otra cosa falla y se reintenta hasta la cola de fallidos. Límite: la lista de tablas protegidas es
-  manual, y el autorizador se ha comprobado en Linux, no en Windows.
+  otra cosa falla y se reintenta hasta la cola de fallidos. Un evento fallido solo vuelve a la cola
+  por la API de la plataforma, con confirmación y reautenticación, sin borrarse y con su constancia
+  en la auditoría. Quien ya lo recibió no lo recibe otra vez. Límite: la lista de tablas protegidas
+  es manual; cada base de datos debe tener un único bus por proceso; y el autorizador se ha
+  comprobado en Linux, no en Windows.
 
 ## Controles de la etapa 4
 
@@ -147,8 +150,9 @@ Estos límites vienen del documento maestro y no se relajan:
   sección 5.
 - **Cifrado de datos sensibles.** La base de datos y las copias están en texto plano. Solo las
   contraseñas se guardan como hash; cuentas, roles, sesiones y auditoría no están cifrados.
-- **Integridad de la auditoría.** Los eventos no están encadenados ni firmados. Quien pueda escribir
-  en la base de datos puede alterarlos sin que se detecte.
+- **Integridad de la auditoría.** Los eventos y las revisiones de plugins son inmutables por
+  disparadores SQL (migración 12). No están encadenados ni firmados: quien pueda escribir en la base
+  de datos puede eliminar los disparadores y alterar los eventos sin que quede rastro.
 - **Primer administrador.** El código de instalación se muestra en la misma terminal. Quien pueda
   ver esa terminal durante la instalación puede completarla. No hay un canal externo para entregar el
   código. El límite de cinco intentos es por código: cada ejecución emite uno nuevo. La protección
@@ -162,6 +166,17 @@ Estos límites vienen del documento maestro y no se relajan:
 - **Desbloqueo.** No hay desbloqueo manual. Una cuenta bloqueada vuelve a estar disponible cuando
   caduca el bloqueo. El bloqueo es por cuenta: cualquiera con acceso a la terminal puede bloquear
   una cuenta conocida provocando cinco fallos.
+- **Configuración: restauración y reversión.** `ConfigurationManager.restore` exige `authorized=True`,
+  pero no pasa por el guardián ni deja evento de auditoría. Ninguna interfaz la llama hoy.
+- **Anti-escalada en `set_roles`.** Aplica la separación de funciones y comprueba que el rol existe,
+  pero no comprueba quién la llama ni impide asignar `administrador` desde código del proceso.
+  Ninguna interfaz la llama; solo las pruebas.
+- **Ámbito en `create_account`.** La terminal comprueba el ámbito de la empresa antes de llamar al
+  servicio. El servicio confía en quien lo llama: una llamada directa a la API no tiene esa
+  comprobación.
+- **Huella de evaluaciones.** La evaluación guarda la huella del documento, no el documento. La
+  huella no se recalcula al cargarla; la integridad descansa en la inmutabilidad de `audit_runs`
+  (disparadores).
 - **Coste de inicio.** Cada comprobación de contraseña tarda unos 0,1 s con los parámetros por
   defecto en el entorno de desarrollo. Las pruebas usan 1 000 iteraciones; ese valor no debe usarse
   en producción.
