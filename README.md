@@ -1,7 +1,7 @@
 # NATXAJO-LOGIN-AUDITOR
 Professional Windows authentication security auditing tool built with Python and PowerShell. Includes login form analysis, controlled authentication testing, password policy evaluation, rate-limit auditing and security reports.
 
-> La descripción anterior es el alcance objetivo del proyecto. Hoy están implementados el núcleo, la configuración, las versiones, los módulos, la verificación de plugins, el control de acceso, un motor de auditoría que evalúa configuraciones declaradas sin conexión, los informes y el mantenimiento básico. No hay pruebas activas contra sistemas en ejecución (ver `docs/IMPLEMENTATION_STATUS.md`).
+> La descripción anterior es el alcance objetivo del proyecto. Hoy están implementados el núcleo, la configuración, las versiones, los módulos, la verificación de plugins, el control de acceso, un motor de auditoría que evalúa configuraciones declaradas sin conexión, los informes, el mantenimiento básico y un motor de pruebas HTTP y de formularios que solo opera contra objetivos registrados (etapa 5). No hay pruebas de TLS ni de cabeceras HTTP (ver `docs/IMPLEMENTATION_STATUS.md`).
 
 Solo debe usarse sobre sistemas propios o con autorización verificable por escrito. No incluye fuerza bruta, credential stuffing, adivinación de contraseñas, evasión de controles ni recolección de credenciales reales. Ver `docs/seguridad.md`.
 
@@ -38,6 +38,21 @@ Los datos de ejecución (`config/`, `storage/`) se crean en la carpeta del proye
 
 La primera vez que se abre la terminal, con la base vacía, se muestra un código de instalación de un solo uso y se crea la cuenta de administrador de la plataforma. Después, cada uso requiere iniciar sesión.
 
+## Motor de pruebas HTTP y formularios (etapa 5)
+
+Solo opera contra objetivos registrados con confirmación, y las pruebas exigen cuentas sintéticas
+configuradas (ver `docs/PRUEBAS_HTTP.md`):
+
+```bash
+python main.py targets add http://127.0.0.1:8080 --usuario admin --confirmar
+python main.py forms list --usuario admin
+python main.py test suites run login-validation --usuario admin --confirmar
+python main.py requests inspect --usuario admin
+```
+
+En Windows, `natxajo.cmd` y `.\natxajo.ps1` aceptan los mismos argumentos. Todavía no se han ejecutado
+en Windows.
+
 ## Pruebas
 
 ```bash
@@ -63,6 +78,7 @@ Versiones probadas, rangos y limitaciones del bloqueo: `docs/DEPENDENCIAS.md`.
 - `docs/MANTENIMIENTO.md`: diagnóstico, limpieza de temporales y recuperación ante errores.
 - `docs/MATRIZ_ETAPA_4.md`: funcionalidades, archivos y pruebas de la etapa 4.
 - `docs/PLUGINS_CICLO.md`: cuarentena, actualización y reversión de plugins, permisos, reglas y límites.
+- `docs/PRUEBAS_HTTP.md`: motor de pruebas HTTP y formularios (etapa 5): configuración, comandos, resultados y límites.
 - `docs/CLAUDE_ARCHITECTURE_AUDIT.md`: auditoría de arquitectura y plan de corrección por etapas.
 - `CHANGELOG.md`: historial de cambios.
 
@@ -74,4 +90,8 @@ Multiempresa: las cuentas pertenecen a una empresa y el ámbito se comprueba en 
 
 Etapa 4: motor de auditoría sin conexión (17 reglas, perfiles y evaluaciones inmutables), informes JSON, CSV, HTML y TXT con verificación, diagnóstico y limpieza de temporales, y terminal con las opciones 20 a 33 (evaluaciones, informes, mantenimiento, reglas y, para plugins, estado, cuarentena, actualización y reversión).
 
-Pendiente: ejecución de módulos y plugins, instalación y habilitación de plugins desde la terminal, gestión de permisos desde la terminal, restauración de copias desde la terminal, automatización, pruebas activas de auditoría e interfaz de escritorio. No se declaran como disponibles hasta que tengan pruebas.
+Etapa 5: motor de pruebas HTTP y formularios contra objetivos registrados, con cuentas sintéticas
+tomadas del entorno, resultados PASS, FAIL, BLOCKED, ERROR y SKIPPED, y la CLI `natxajo` (grupos
+`forms`, `auth`, `security`, `requests`, `reports`, `test`, `targets` y `accounts`).
+
+Pendiente: ejecución de módulos y plugins, instalación y habilitación de plugins desde la terminal, gestión de permisos desde la terminal, restauración de copias desde la terminal, automatización, pruebas de TLS y de cabeceras HTTP, pruebas HTTP desde la interfaz gráfica y la terminal, e interfaz de escritorio. No se declaran como disponibles hasta que tengan pruebas.

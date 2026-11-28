@@ -92,6 +92,12 @@ CATALOG: Mapping[str, EventSpec] = {
     "plugin.quarantine_released": _spec(_SEC, "plugin version username"),
     "plugin.updated": _spec(_OP, "plugin from to publisher username"),
     "plugin.rolled_back": _spec(_OP, "plugin from to username"),
+    "pruebas.objetivo_registrado": _spec(_SEC, "origen"),
+    "pruebas.ejecucion_iniciada": _spec(_SEC, "run_id suite origen formulario casos"),
+    "pruebas.ejecucion_terminada": _spec(
+        _SEC, "run_id estado pass fail blocked error skipped requests"
+    ),
+    "pruebas.informe_exportado": _spec(_OP, "run_id formato sha256"),
 }
 
 JsonValue = str | int | bool | None | list[str]

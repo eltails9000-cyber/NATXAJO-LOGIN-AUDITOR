@@ -41,7 +41,8 @@ hace fallar la suite, y también los ciclos y la importación relativa.
 | `auditing` | `core`, `storage` |
 | `reporting` | `auditing`, `core`, `storage` |
 | `maintenance` | `core`, `storage` |
-| `kernel` | `auditing`, `configuration`, `core`, `maintenance`, `modules`, `plugins`, `reporting`, `security`, `storage`, `versioning` |
+| `pruebas` | `core`, `storage` |
+| `kernel` | `auditing`, `configuration`, `core`, `maintenance`, `modules`, `plugins`, `pruebas`, `reporting`, `security`, `storage`, `versioning` |
 | `interfaces` | `core`, `kernel` |
 | `(raiz)` | `core`, `kernel`, `interfaces` |
 
@@ -171,3 +172,5 @@ fallidos. Al arrancar se entregan los pendientes. La auditoría es un consumidor
 | Copias de almacenamiento | `storage/backups/` | Ignorado por git |
 | Manifiestos de versión | `versions/` | Versionado en git |
 | Copias previas a migraciones | `storage/migraciones/` | Ignorado por git; contienen hashes |
+| Configuración de pruebas | `config/pruebas/` | Ignorado por git. Formularios, cuentas sintéticas y límites; las contraseñas van en variables de entorno |
+| Informes de pruebas | `reports/pruebas/` | Ignorado por git. Un archivo por exportación, con su SHA-256 registrado en la base de datos |

@@ -34,6 +34,8 @@ DOMAIN_SERVICES = (
     "auditing",
     "reports",
     "maintenance",
+    # Etapa 5: pruebas HTTP, con el mismo guardián y la misma auditoría.
+    "pruebas",
     # Restauración de configuración con guardián: comparte el guardián y la auditoría.
     "configuration_service",
 )

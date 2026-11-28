@@ -30,6 +30,7 @@ ALLOWED: dict[str, frozenset[str]] = {
     "auditing": frozenset({"core", "storage"}),
     "reporting": frozenset({"auditing", "core", "storage"}),
     "maintenance": frozenset({"core", "storage"}),
+    "pruebas": frozenset({"core", "storage"}),
     "kernel": frozenset(
         {
             "auditing",
@@ -38,6 +39,7 @@ ALLOWED: dict[str, frozenset[str]] = {
             "maintenance",
             "modules",
             "plugins",
+            "pruebas",
             "reporting",
             "security",
             "storage",
@@ -56,6 +58,7 @@ SUBSYSTEMS = frozenset(
         "maintenance",
         "modules",
         "plugins",
+        "pruebas",
         "reporting",
         "security",
         "storage",

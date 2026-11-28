@@ -29,6 +29,7 @@ from natxajo_auditor.kernel.service_container import ServiceContainer, ServiceKe
 from natxajo_auditor.maintenance.service import MaintenanceService
 from natxajo_auditor.modules.manager import ModuleManager
 from natxajo_auditor.plugins.manager import PluginManager
+from natxajo_auditor.pruebas.servicio import PruebasService
 from natxajo_auditor.reporting.service import ReportService
 from natxajo_auditor.reporting.signing import KEY_FILE, ReportSigner
 from natxajo_auditor.security.passwords import DEFAULT_ITERATIONS, MIN_ITERATIONS
@@ -57,6 +58,7 @@ SERVICE_SECURITY = "security"
 SERVICE_AUDITING = "auditing"
 SERVICE_REPORTS = "reports"
 SERVICE_MAINTENANCE = "maintenance"
+SERVICE_PRUEBAS = "pruebas"
 MIGRATION_COPIES_DIR = "migraciones"
 
 DATABASE: ServiceKey[Database] = ServiceKey(SERVICE_DATABASE, Database)
@@ -76,6 +78,7 @@ PLUGINS: ServiceKey[PluginManager] = ServiceKey(SERVICE_PLUGINS, PluginManager)
 AUDITING: ServiceKey[AuditingService] = ServiceKey(SERVICE_AUDITING, AuditingService)
 REPORTS: ServiceKey[ReportService] = ServiceKey(SERVICE_REPORTS, ReportService)
 MAINTENANCE: ServiceKey[MaintenanceService] = ServiceKey(SERVICE_MAINTENANCE, MaintenanceService)
+PRUEBAS: ServiceKey[PruebasService] = ServiceKey(SERVICE_PRUEBAS, PruebasService)
 
 
 def compose(
@@ -175,6 +178,19 @@ def compose(
             gate=security.guard,
             clock=clock,
             managed_dirs=(context.config_dir, context.storage_dir, context.reports_dir),
+        ),
+    )
+    # Etapa 5: pruebas HTTP. Usa el mismo guardián, la misma auditoría y el mismo almacén.
+    services.put(
+        PRUEBAS,
+        PruebasService(
+            database=database,
+            audit=audit,
+            gate=security.guard,
+            clock=clock,
+            config_dir=context.config_dir,
+            reports_dir=context.reports_dir,
+            platform_version=kernel_version,
         ),
     )
     services.put(

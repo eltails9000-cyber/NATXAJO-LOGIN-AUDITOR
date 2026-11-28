@@ -563,6 +563,116 @@ MIGRATIONS: tuple[Migration, ...] = (
             "ALTER TABLE event_outbox DROP COLUMN requeues",
         ),
     ),
+    Migration(
+        version=14,
+        name="pruebas_http",
+        # Motor de pruebas HTTP. Los objetivos, las ejecuciones, los resultados y las exportaciones
+        # no se modifican ni se borran. Un resultado solo se inserta en una ejecución en curso, y una
+        # ejecución se cierra una única vez. Ninguna tabla guarda contraseñas, cookies ni cuerpos de
+        # respuesta: solo códigos, tiempos, resultados y motivos.
+        statements=(
+            """
+            CREATE TABLE http_targets (
+                origin TEXT PRIMARY KEY CHECK (origin GLOB 'http*' AND length(origin) BETWEEN 8 AND 300),
+                registered_at TEXT NOT NULL,
+                registered_by TEXT NOT NULL CHECK (length(registered_by) BETWEEN 3 AND 40)
+            )
+            """,
+            """
+            CREATE TRIGGER http_targets_are_immutable BEFORE UPDATE ON http_targets
+            BEGIN SELECT RAISE(ABORT, 'los objetivos registrados no se modifican'); END
+            """,
+            """
+            CREATE TRIGGER http_targets_are_not_deleted BEFORE DELETE ON http_targets
+            BEGIN SELECT RAISE(ABORT, 'los objetivos registrados no se borran'); END
+            """,
+            """
+            CREATE TABLE http_runs (
+                id TEXT PRIMARY KEY CHECK (length(id) = 36),
+                suite TEXT NOT NULL CHECK (length(suite) BETWEEN 1 AND 60),
+                origin TEXT NOT NULL REFERENCES http_targets(origin),
+                schema_sha256 TEXT NOT NULL CHECK (length(schema_sha256) = 64),
+                requested_by TEXT NOT NULL CHECK (length(requested_by) BETWEEN 3 AND 40),
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                status TEXT NOT NULL CHECK (status IN ('en_curso', 'completada', 'cancelada')),
+                cases INTEGER NOT NULL CHECK (cases >= 0),
+                requests INTEGER NOT NULL DEFAULT 0 CHECK (requests >= 0),
+                CHECK ((status = 'en_curso') = (finished_at IS NULL))
+            )
+            """,
+            """
+            CREATE TRIGGER http_runs_close_once BEFORE UPDATE ON http_runs
+            WHEN OLD.status <> 'en_curso'
+            BEGIN SELECT RAISE(ABORT, 'una ejecución cerrada no se modifica'); END
+            """,
+            """
+            CREATE TRIGGER http_runs_are_not_deleted BEFORE DELETE ON http_runs
+            BEGIN SELECT RAISE(ABORT, 'las ejecuciones no se borran'); END
+            """,
+            """
+            CREATE TABLE http_results (
+                run_id TEXT NOT NULL REFERENCES http_runs(id),
+                position INTEGER NOT NULL CHECK (position >= 1),
+                case_id TEXT NOT NULL CHECK (length(case_id) BETWEEN 1 AND 120),
+                form_id TEXT NOT NULL CHECK (length(form_id) BETWEEN 1 AND 60),
+                form_type TEXT NOT NULL,
+                account TEXT,
+                outcome TEXT NOT NULL CHECK (outcome IN ('PASS', 'FAIL', 'BLOCKED', 'ERROR', 'SKIPPED')),
+                expected TEXT NOT NULL,
+                observed TEXT NOT NULL,
+                http_status INTEGER CHECK (http_status IS NULL OR http_status BETWEEN 0 AND 999),
+                duration_ms INTEGER CHECK (duration_ms IS NULL OR duration_ms >= 0),
+                reason TEXT NOT NULL CHECK (length(reason) <= 300),
+                PRIMARY KEY (run_id, position)
+            )
+            """,
+            """
+            CREATE TRIGGER http_results_only_while_open BEFORE INSERT ON http_results
+            WHEN (SELECT status FROM http_runs WHERE id = NEW.run_id) <> 'en_curso'
+            BEGIN SELECT RAISE(ABORT, 'los resultados solo se añaden a una ejecución en curso'); END
+            """,
+            """
+            CREATE TRIGGER http_results_are_immutable BEFORE UPDATE ON http_results
+            BEGIN SELECT RAISE(ABORT, 'los resultados no se modifican'); END
+            """,
+            """
+            CREATE TRIGGER http_results_are_not_deleted BEFORE DELETE ON http_results
+            BEGIN SELECT RAISE(ABORT, 'los resultados no se borran'); END
+            """,
+            """
+            CREATE TABLE http_exports (
+                id TEXT PRIMARY KEY CHECK (length(id) = 36),
+                run_id TEXT NOT NULL REFERENCES http_runs(id),
+                format TEXT NOT NULL CHECK (format IN ('json', 'csv', 'html', 'txt')),
+                requested_by TEXT NOT NULL CHECK (length(requested_by) BETWEEN 3 AND 40),
+                relative_path TEXT NOT NULL UNIQUE CHECK (length(relative_path) BETWEEN 1 AND 300),
+                sha256 TEXT NOT NULL CHECK (length(sha256) = 64),
+                size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TRIGGER http_exports_only_for_closed_runs BEFORE INSERT ON http_exports
+            WHEN (SELECT status FROM http_runs WHERE id = NEW.run_id) = 'en_curso'
+            BEGIN SELECT RAISE(ABORT, 'no se exporta una ejecución en curso'); END
+            """,
+            """
+            CREATE TRIGGER http_exports_are_immutable BEFORE UPDATE ON http_exports
+            BEGIN SELECT RAISE(ABORT, 'las exportaciones no se modifican'); END
+            """,
+            """
+            CREATE TRIGGER http_exports_are_not_deleted BEFORE DELETE ON http_exports
+            BEGIN SELECT RAISE(ABORT, 'las exportaciones no se borran'); END
+            """,
+        ),
+        down=(
+            "DROP TABLE http_exports",
+            "DROP TABLE http_results",
+            "DROP TABLE http_runs",
+            "DROP TABLE http_targets",
+        ),
+    ),
 )
 
 # Tablas cuyas filas se pierden al revertir una migración. Con filas dentro, la reversión se niega
@@ -571,6 +681,7 @@ PROTECTED_BY_MIGRATION: dict[int, tuple[str, ...]] = {
     10: ("audit_runs", "audit_findings", "report_exports"),
     11: ("plugin_quarantine", "plugin_history"),
     12: ("plugin_reviews",),
+    14: ("http_targets", "http_runs", "http_results", "http_exports"),
 }
 
 _BOOKKEEPING = (

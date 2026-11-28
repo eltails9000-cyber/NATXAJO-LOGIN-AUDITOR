@@ -45,7 +45,7 @@ def _v5_database(path: Path) -> Database:
 
 def test_upgrade_from_v5_keeps_every_row_and_classifies_existing_events(tmp_path: Path) -> None:
     database = _v5_database(tmp_path / "v5.db")
-    assert apply_migrations(database) == [6, 7, 8, 9, 10, 11, 12, 13]
+    assert apply_migrations(database) == [6, 7, 8, 9, 10, 11, 12, 13, 14]
     # Estrategia explícita: las cuentas previas pertenecen a la plataforma, que existía antes
     # de las empresas. Los eventos previos no reciben empresa: solo los ve la plataforma.
     assert database.fetchall("SELECT username, company_id FROM accounts") == [
@@ -71,7 +71,7 @@ def test_an_empty_v5_database_starts_with_a_pending_installation(tmp_path: Path)
     database = Database(tmp_path / "vacia.db")
     database.open()
     apply_migrations(database, V5)
-    assert apply_migrations(database) == [6, 7, 8, 9, 10, 11, 12, 13]
+    assert apply_migrations(database) == [6, 7, 8, 9, 10, 11, 12, 13, 14]
     assert database.fetchall("SELECT state FROM installation WHERE id = 1") == [("pending",)]
     database.close()
 
@@ -79,7 +79,7 @@ def test_an_empty_v5_database_starts_with_a_pending_installation(tmp_path: Path)
 def test_rolling_back_to_v5_keeps_accounts_and_events(tmp_path: Path) -> None:
     database = _v5_database(tmp_path / "ida.db")
     apply_migrations(database)
-    assert rollback_migrations(database, 5) == [13, 12, 11, 10, 9, 8, 7, 6]
+    assert rollback_migrations(database, 5) == [14, 13, 12, 11, 10, 9, 8, 7, 6]
     accounts_columns = {row[1] for row in database.fetchall("PRAGMA table_info(accounts)")}
     assert "company_id" not in accounts_columns
     assert (
@@ -102,8 +102,8 @@ def test_rolling_back_to_v5_keeps_accounts_and_events(tmp_path: Path) -> None:
 def test_reapplying_the_installation_migration_recomputes_its_state(tmp_path: Path) -> None:
     database = _v5_database(tmp_path / "recalculo.db")
     apply_migrations(database)
-    assert rollback_migrations(database, 6) == [13, 12, 11, 10, 9, 8, 7]
-    assert apply_migrations(database) == [7, 8, 9, 10, 11, 12, 13]
+    assert rollback_migrations(database, 6) == [14, 13, 12, 11, 10, 9, 8, 7]
+    assert apply_migrations(database) == [7, 8, 9, 10, 11, 12, 13, 14]
     # Con cuentas existentes, la instalación vuelve a quedar completada y no se reabre.
     assert database.fetchall("SELECT state FROM installation WHERE id = 1") == [("completed",)]
     database.close()
@@ -113,7 +113,7 @@ def test_reapplying_after_a_rollback_restores_the_schema(tmp_path: Path) -> None
     database = _v5_database(tmp_path / "ida_y_vuelta.db")
     apply_migrations(database)
     rollback_migrations(database, 5)
-    assert apply_migrations(database) == [6, 7, 8, 9, 10, 11, 12, 13]
+    assert apply_migrations(database) == [6, 7, 8, 9, 10, 11, 12, 13, 14]
     assert database.fetchall("SELECT username, company_id FROM accounts") == [
         ("admin_viejo", "plataforma")
     ]
