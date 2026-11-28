@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import ssl
 import threading
 import uuid
-from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Final
@@ -30,7 +30,12 @@ from natxajo_auditor.core.contracts import (
 )
 from natxajo_auditor.core.exceptions import AuthorizationError, ValidationError
 from natxajo_auditor.core.utilities import Clock, atomic_write_bytes, sha256_bytes, to_iso
-from natxajo_auditor.pruebas.cliente import ClienteHttp
+from natxajo_auditor.pruebas.cliente import (
+    CambioDnsError,
+    ClienteHttp,
+    Resolver,
+    resolver_del_sistema,
+)
 from natxajo_auditor.pruebas.cuentas import resolver_credenciales
 from natxajo_auditor.pruebas.esquema import (
     ARCHIVO_FORMULARIOS,
@@ -49,11 +54,12 @@ from natxajo_auditor.pruebas.modelo import (
     CuentaSintetica,
     Formulario,
     Limites,
+    Resultado,
     ResultadoCaso,
     TipoFormulario,
 )
-from natxajo_auditor.pruebas.motor import Contexto, Presupuesto, ejecutar_casos, numerar
-from natxajo_auditor.pruebas.objetivos import esta_permitido, normalizar_origen
+from natxajo_auditor.pruebas.motor import Contexto, Presupuesto, ejecutar_casos
+from natxajo_auditor.pruebas.objetivos import Origen, esta_permitido, normalizar_origen
 from natxajo_auditor.pruebas.procedimientos import PROCEDIMIENTOS
 from natxajo_auditor.pruebas.repositorio import RepositorioPruebas
 from natxajo_auditor.storage.audit import AuditLog
@@ -61,6 +67,78 @@ from natxajo_auditor.storage.database import Database
 
 MAX_HISTORIAL: Final = 200
 MAX_NOMBRE_INFORME: Final = 80
+# Texto de cada motivo de cierre, para explicar por qué un caso no llegó a registrarse.
+_TEXTO_MOTIVO: Final = {
+    "cambio_dns": "cambio de dirección del objetivo",
+    "cancelada_por_operador": "cancelación del operador",
+    "fallo_tecnico": "fallo técnico",
+}
+
+
+class _Sumidero:
+    """Recibe cada resultado en cuanto se produce y lo guarda en su propia transacción.
+
+    Así un resultado ya obtenido sobrevive a un fallo posterior. La posición la asigna el sumidero,
+    en orden de llegada, y la clave (ejecución, posición) impide que un resultado se duplique.
+    """
+
+    def __init__(
+        self,
+        database: Database,
+        repo: RepositorioPruebas,
+        run_id: str,
+        presupuesto: Presupuesto,
+    ) -> None:
+        self._db = database
+        self._repo = repo
+        self._run_id = run_id
+        self._presupuesto = presupuesto
+        self._recibidos: set[int] = set()
+        self.emitidos = 0
+
+    def __call__(self, resultado: ResultadoCaso) -> None:
+        self.emitidos += 1
+        numerado = dataclasses.replace(resultado, posicion=self.emitidos)
+        with self._db.transaction() as conexion:
+            self._repo.registrar_resultado(conexion, self._run_id, numerado)
+            self._repo.progreso(conexion, self._run_id, self._presupuesto.usadas)
+        self._recibidos.add(id(resultado))
+
+    def completar(self, resultados: Sequence[ResultadoCaso]) -> None:
+        """Persiste los resultados devueltos que no llegaron por el camino normal."""
+        for resultado in resultados:
+            if id(resultado) not in self._recibidos:
+                self(resultado)
+
+    def completar_no_registrados(self, casos: Sequence[Caso], motivo: str) -> None:
+        """Cada caso planificado tiene un resultado: los que no llegaron se registran como SKIPPED."""
+        for caso in casos[self.emitidos :]:
+            self(_resultado_no_registrado(caso, motivo))
+
+
+def _motivo_de_cierre(exc: BaseException, cancelacion: threading.Event) -> str:
+    if isinstance(exc, CambioDnsError):
+        return "cambio_dns"
+    if isinstance(exc, KeyboardInterrupt) or cancelacion.is_set():
+        return "cancelada_por_operador"
+    return "fallo_tecnico"
+
+
+def _resultado_no_registrado(caso: Caso, motivo: str) -> ResultadoCaso:
+    texto = _TEXTO_MOTIVO.get(motivo, "fallo técnico")
+    return ResultadoCaso(
+        posicion=0,
+        caso_id=caso.id,
+        formulario_id=caso.formulario.id,
+        tipo=caso.formulario.tipo.value,
+        cuenta=caso.cuenta,
+        resultado=Resultado.SKIPPED,
+        esperado=caso.esperado.value,
+        observado="",
+        codigo_http=None,
+        duracion_ms=None,
+        motivo=f"no registrado: la ejecución terminó por {texto}"[:300],
+    )
 
 
 class PruebasService:
@@ -75,6 +153,8 @@ class PruebasService:
         reports_dir: Path,
         platform_version: str,
         entorno: Mapping[str, str] | None = None,
+        resolver: Resolver = resolver_del_sistema,
+        contexto_tls: ssl.SSLContext | None = None,
     ) -> None:
         self._db = database
         self._audit = audit
@@ -86,6 +166,12 @@ class PruebasService:
         self._version = platform_version
         # Copia del entorno al crear el servicio: las credenciales se leen de aquí y no se guardan.
         self._entorno: dict[str, str] = dict(os.environ) if entorno is None else dict(entorno)
+        # `contexto_tls` solo lo usan las pruebas, para confiar en una autoridad de laboratorio.
+        self._resolver = resolver
+        self._contexto_tls = contexto_tls
+        self._cerrojo = threading.Lock()
+        # Ejecuciones vivas en este proceso. La recuperación no las toca.
+        self._activas: set[str] = set()
 
     # ----- Objetivos permitidos -------------------------------------------------------------
 
@@ -252,6 +338,53 @@ class PruebasService:
             cancelacion=cancelacion,
         )
 
+    def recuperar_interrumpidas(self, token: str, *, confirmed: bool) -> list[dict[str, object]]:
+        """Cierra las ejecuciones que quedaron en curso porque el proceso se detuvo antes de cerrarlas.
+
+        No borra nada: conserva los resultados ya persistidos y las solicitudes registradas hasta el
+        último resultado. Cada ejecución recuperada queda cancelada con motivo `interrumpida_recuperada`
+        y deja un evento de auditoría. Las ejecuciones vivas en este proceso no se tocan.
+        """
+
+        def operacion() -> list[dict[str, object]]:
+            usuario = self._gate.username_for(token)
+            with self._cerrojo:
+                vivas = set(self._activas)
+            recuperadas: list[dict[str, object]] = []
+            for run_id, solicitudes in self._repo.ejecuciones_en_curso():
+                if run_id in vivas:
+                    continue
+                with self._db.transaction() as conexion:
+                    conteos = self._repo.conteo_resultados(conexion, run_id)
+                    self._repo.cerrar_ejecucion(
+                        conexion,
+                        run_id=run_id,
+                        estado="cancelada",
+                        terminado_en=to_iso(self._clock()),
+                        solicitudes=solicitudes,
+                        motivo="interrumpida_recuperada",
+                    )
+                    self._audit.record(
+                        "pruebas.ejecucion_recuperada",
+                        {
+                            "run_id": run_id,
+                            "resultados": sum(conteos.values()),
+                            "solicitudes": solicitudes,
+                        },
+                        conexion,
+                        actor=usuario,
+                    )
+                recuperadas.append(
+                    {
+                        "run_id": run_id,
+                        "resultados": sum(conteos.values()),
+                        "solicitudes": solicitudes,
+                    }
+                )
+            return recuperadas
+
+        return self._gate.run(token, HTTP_RUN_PERMISSION, operacion, confirmed=confirmed)
+
     def historial(self, token: str, limite: int = 20) -> list[dict[str, object]]:
         if not 1 <= limite <= MAX_HISTORIAL:
             raise ValidationError(f"el límite del historial debe estar entre 1 y {MAX_HISTORIAL}")
@@ -287,24 +420,15 @@ class PruebasService:
             destino = self._reports_dir / relativa
             destino.parent.mkdir(parents=True, exist_ok=True)
             atomic_write_bytes(destino, contenido)
-            with self._db.transaction() as conexion:
-                self._repo.registrar_exportacion(
-                    conexion,
-                    export_id=export_id,
-                    run_id=run_id,
-                    formato=formato,
-                    usuario=usuario,
-                    ruta_relativa=relativa,
-                    sha256=digest,
-                    tamano=len(contenido),
-                    creado_en=generado,
+            try:
+                self._registrar_exportacion_en_db(
+                    export_id, run_id, formato, usuario, relativa, digest, contenido, generado
                 )
-                self._audit.record(
-                    "pruebas.informe_exportado",
-                    {"run_id": run_id, "formato": formato, "sha256": digest},
-                    conexion,
-                    actor=usuario,
-                )
+            except BaseException:
+                # Sin registro no debe quedar un archivo huérfano. El nombre tiene un UUID nuevo, así
+                # que el archivo es el que acabamos de escribir.
+                destino.unlink(missing_ok=True)
+                raise
             return {
                 "id": export_id,
                 "run_id": run_id,
@@ -315,6 +439,36 @@ class PruebasService:
             }
 
         return self._gate.run(token, HTTP_EXPORT_PERMISSION, operacion)
+
+    def _registrar_exportacion_en_db(
+        self,
+        export_id: str,
+        run_id: str,
+        formato: str,
+        usuario: str,
+        relativa: str,
+        digest: str,
+        contenido: bytes,
+        generado: str,
+    ) -> None:
+        with self._db.transaction() as conexion:
+            self._repo.registrar_exportacion(
+                conexion,
+                export_id=export_id,
+                run_id=run_id,
+                formato=formato,
+                usuario=usuario,
+                ruta_relativa=relativa,
+                sha256=digest,
+                tamano=len(contenido),
+                creado_en=generado,
+            )
+            self._audit.record(
+                "pruebas.informe_exportado",
+                {"run_id": run_id, "formato": formato, "sha256": digest},
+                conexion,
+                actor=usuario,
+            )
 
     def verificar_informes(self, token: str) -> list[dict[str, object]]:
         """Estado de cada informe exportado: correcto, alterado, faltante o fuera de la carpeta."""
@@ -377,6 +531,9 @@ class PruebasService:
                     _con_marcador_mfa(formulario),
                     [(c.id, credenciales[c.id]) for c in seleccion],
                 )
+            # Un objetivo que no resuelve no es un plan válido: se comprueba antes de abrir nada.
+            cliente = self._cliente(origen, limites)
+            cliente.fijar_direcciones()
 
             run_id = str(uuid.uuid4())
             iniciado = to_iso(self._clock())
@@ -404,32 +561,43 @@ class PruebasService:
                     conexion,
                     actor=usuario,
                 )
-
-            presupuesto = Presupuesto(limites.max_solicitudes)
-            cancelacion_activa = cancelacion if cancelacion is not None else threading.Event()
+            with self._cerrojo:
+                self._activas.add(run_id)
             try:
-                contexto = Contexto(
-                    cliente=ClienteHttp(origen, limites.timeout_s),
-                    limites=limites,
-                    presupuesto=presupuesto,
-                    cancelacion=cancelacion_activa,
-                )
-                if procedimiento:
-                    primera = seleccion[0]
-                    resultados = numerar(
-                        PROCEDIMIENTOS[nombre](
+                presupuesto = Presupuesto(limites.max_solicitudes)
+                cancelacion_activa = cancelacion if cancelacion is not None else threading.Event()
+                sumidero = _Sumidero(self._db, self._repo, run_id, presupuesto)
+                try:
+                    contexto = Contexto(
+                        cliente=cliente,
+                        limites=limites,
+                        presupuesto=presupuesto,
+                        cancelacion=cancelacion_activa,
+                        sumidero=sumidero,
+                    )
+                    if procedimiento:
+                        primera = seleccion[0]
+                        resultados = PROCEDIMIENTOS[nombre](
                             contexto, formulario, credenciales[primera.id], primera.id
                         )
-                    )
-                else:
-                    resultados = ejecutar_casos(casos, contexto)
-            except BaseException:
-                # Un fallo a mitad deja la ejecución cerrada como cancelada, nunca en curso.
-                self._cerrar(run_id, usuario, "cancelada", [], presupuesto.usadas)
-                raise
-            estado = "cancelada" if cancelacion_activa.is_set() else "completada"
-            self._cerrar(run_id, usuario, estado, resultados, presupuesto.usadas)
-            return self._ejecucion_o_error(run_id)
+                        sumidero.completar(resultados)
+                    else:
+                        ejecutar_casos(casos, contexto)
+                except BaseException as exc:
+                    # Un fallo a mitad cierra la ejecución como cancelada, nunca en curso. Los
+                    # resultados ya recibidos están persistidos; los casos sin resultado se registran.
+                    motivo = _motivo_de_cierre(exc, cancelacion_activa)
+                    if not procedimiento:
+                        sumidero.completar_no_registrados(casos, motivo)
+                    self._cerrar(run_id, usuario, "cancelada", presupuesto.usadas, motivo)
+                    raise
+                motivo_final = "cancelada_por_operador" if cancelacion_activa.is_set() else None
+                estado = "cancelada" if motivo_final is not None else "completada"
+                self._cerrar(run_id, usuario, estado, presupuesto.usadas, motivo_final)
+                return self._ejecucion_o_error(run_id)
+            finally:
+                with self._cerrojo:
+                    self._activas.discard(run_id)
 
         return self._gate.run(
             token,
@@ -438,34 +606,43 @@ class PruebasService:
             confirmed=confirmed,
         )
 
+    def _cliente(self, origen: Origen, limites: Limites) -> ClienteHttp:
+        return ClienteHttp(
+            origen,
+            limites.timeout_s,
+            resolver=self._resolver,
+            contexto_tls=self._contexto_tls,
+        )
+
     def _cerrar(
         self,
         run_id: str,
         usuario: str,
         estado: str,
-        resultados: Sequence[ResultadoCaso],
         solicitudes: int,
+        motivo: str | None,
     ) -> None:
-        cuenta = Counter(r.resultado.value for r in resultados)
         with self._db.transaction() as conexion:
+            conteos = self._repo.conteo_resultados(conexion, run_id)
             self._repo.cerrar_ejecucion(
                 conexion,
                 run_id=run_id,
                 estado=estado,
                 terminado_en=to_iso(self._clock()),
                 solicitudes=solicitudes,
-                resultados=resultados,
+                motivo=motivo,
             )
             self._audit.record(
                 "pruebas.ejecucion_terminada",
                 {
                     "run_id": run_id,
                     "estado": estado,
-                    "pass": cuenta.get("PASS", 0),
-                    "fail": cuenta.get("FAIL", 0),
-                    "blocked": cuenta.get("BLOCKED", 0),
-                    "error": cuenta.get("ERROR", 0),
-                    "skipped": cuenta.get("SKIPPED", 0),
+                    "motivo_cierre": motivo,
+                    "pass": conteos.get("PASS", 0),
+                    "fail": conteos.get("FAIL", 0),
+                    "blocked": conteos.get("BLOCKED", 0),
+                    "error": conteos.get("ERROR", 0),
+                    "skipped": conteos.get("SKIPPED", 0),
                     "requests": solicitudes,
                 },
                 conexion,

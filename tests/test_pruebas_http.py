@@ -390,7 +390,7 @@ def test_servidor_inalcanzable_produce_ERROR_de_conexion(plataforma: Kernel) -> 
     )
 
     assert _estados(ejecucion) == ["ERROR"] * 6
-    assert all("error de conexión" in r["motivo"] for r in ejecucion["resultados"])
+    assert all("conexión rechazada" in r["motivo"] for r in ejecucion["resultados"])
 
 
 def test_presupuesto_de_solicitudes_detiene_la_ejecucion(arrancar: Callable[..., Kernel]) -> None:

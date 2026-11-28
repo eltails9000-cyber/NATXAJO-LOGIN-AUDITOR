@@ -95,8 +95,9 @@ CATALOG: Mapping[str, EventSpec] = {
     "pruebas.objetivo_registrado": _spec(_SEC, "origen"),
     "pruebas.ejecucion_iniciada": _spec(_SEC, "run_id suite origen formulario casos"),
     "pruebas.ejecucion_terminada": _spec(
-        _SEC, "run_id estado pass fail blocked error skipped requests"
+        _SEC, "run_id estado motivo_cierre pass fail blocked error skipped requests"
     ),
+    "pruebas.ejecucion_recuperada": _spec(_OP, "run_id resultados solicitudes"),
     "pruebas.informe_exportado": _spec(_OP, "run_id formato sha256"),
 }
 

@@ -28,6 +28,7 @@ from natxajo_auditor.pruebas.motor import (
     Contexto,
     Detenida,
     FalloTecnico,
+    anotar,
     interrupcion,
     obtener_token,
     resultado_de,
@@ -66,7 +67,9 @@ def limite_de_frecuencia(
             respuesta = contexto.peticion("POST", formulario.ruta, campos, sesion)
             observado, motivo = clasificar(respuesta, formulario.reglas)
             resultado, detalle = evaluar(Observado.RECHAZADA, observado, motivo)
-            resultados.append(
+            anotar(
+                contexto,
+                resultados,
                 resultado_de(
                     formulario,
                     f"limite-frecuencia-intento-{intento:02d}",
@@ -76,7 +79,7 @@ def limite_de_frecuencia(
                     observado.value,
                     detalle,
                     respuesta,
-                )
+                ),
             )
             ultimo = observado
             if observado is Observado.BLOQUEADA:
@@ -86,7 +89,7 @@ def limite_de_frecuencia(
                 break
     except (Detenida, FalloTecnico) as exc:
         interrumpida = interrupcion(formulario, "limite-frecuencia-interrumpido", cuenta, exc)
-        resultados.append(interrumpida)
+        anotar(contexto, resultados, interrumpida)
 
     if bloqueado_en is not None:
         resumen = resultado_de(
@@ -120,7 +123,7 @@ def limite_de_frecuencia(
             "rechazada",
             f"no se observó bloqueo en {maximo} intentos; la prueba no demuestra que no exista límite",
         )
-    resultados.append(resumen)
+    anotar(contexto, resultados, resumen)
     return resultados
 
 
@@ -169,7 +172,9 @@ def proteccion_csrf(
             respuesta = contexto.peticion("POST", formulario.ruta, campos, sesion)
             observado, motivo = clasificar(respuesta, formulario.reglas)
             resultado, detalle = evaluar(esperado, observado, motivo)
-            resultados.append(
+            anotar(
+                contexto,
+                resultados,
                 resultado_de(
                     formulario,
                     caso_id,
@@ -179,10 +184,10 @@ def proteccion_csrf(
                     observado.value,
                     detalle,
                     respuesta,
-                )
+                ),
             )
     except (Detenida, FalloTecnico) as exc:
-        resultados.append(interrupcion(formulario, "csrf-interrumpido", cuenta, exc))
+        anotar(contexto, resultados, interrupcion(formulario, "csrf-interrumpido", cuenta, exc))
     return resultados
 
 
@@ -239,7 +244,9 @@ def prueba_mfa(
         )
         observado, motivo = clasificar(respuesta, reglas_primer_factor)
         resultado, detalle = evaluar(Observado.ACEPTADA, observado, motivo)
-        resultados.append(
+        anotar(
+            contexto,
+            resultados,
             resultado_de(
                 formulario,
                 "mfa-primer-factor",
@@ -249,10 +256,12 @@ def prueba_mfa(
                 observado.value,
                 detalle,
                 respuesta,
-            )
+            ),
         )
         if resultado is not Resultado.PASS:
-            resultados.append(
+            anotar(
+                contexto,
+                resultados,
                 resultado_de(
                     formulario,
                     "mfa-segundo-factor",
@@ -261,7 +270,7 @@ def prueba_mfa(
                     Resultado.SKIPPED,
                     "",
                     "el primer factor no fue aceptado; no se envía el segundo",
-                )
+                ),
             )
             return resultados
         for caso_id, codigo, esperado in (
@@ -278,7 +287,9 @@ def prueba_mfa(
             )
             observado_mfa, motivo_mfa = clasificar(respuesta_mfa, formulario.reglas)
             resultado_mfa, detalle_mfa = evaluar(esperado, observado_mfa, motivo_mfa)
-            resultados.append(
+            anotar(
+                contexto,
+                resultados,
                 resultado_de(
                     formulario,
                     caso_id,
@@ -288,10 +299,10 @@ def prueba_mfa(
                     observado_mfa.value,
                     detalle_mfa,
                     respuesta_mfa,
-                )
+                ),
             )
     except (Detenida, FalloTecnico) as exc:
-        resultados.append(interrupcion(formulario, "mfa-interrumpido", cuenta, exc))
+        anotar(contexto, resultados, interrupcion(formulario, "mfa-interrumpido", cuenta, exc))
     return resultados
 
 
@@ -347,7 +358,8 @@ def atributos_de_cookies(
         ]
     resultados: list[ResultadoCaso] = []
     for indice, cookie in enumerate(respuesta.cookies, start=1):
-        resultados.extend(_atributos_de(formulario, cuenta, indice, cookie, contexto, respuesta))
+        for resultado in _atributos_de(formulario, cuenta, indice, cookie, contexto, respuesta):
+            anotar(contexto, resultados, resultado)
     return resultados
 
 
@@ -390,7 +402,10 @@ def consistencia_de_respuestas(
 
     obs_existente, _ = clasificar(existente, formulario.reglas)
     obs_inexistente, _ = clasificar(inexistente, formulario.reglas)
-    resultados = [
+    resultados: list[ResultadoCaso] = []
+    anotar(
+        contexto,
+        resultados,
         _comparar(
             formulario,
             "consistencia-clasificacion",
@@ -398,6 +413,10 @@ def consistencia_de_respuestas(
             obs_existente.value == obs_inexistente.value,
             f"cuenta existente: {obs_existente.value}; inexistente: {obs_inexistente.value}",
         ),
+    )
+    anotar(
+        contexto,
+        resultados,
         _comparar(
             formulario,
             "consistencia-codigo-http",
@@ -405,18 +424,20 @@ def consistencia_de_respuestas(
             existente.codigo == inexistente.codigo,
             f"cuenta existente: HTTP {existente.codigo}; inexistente: HTTP {inexistente.codigo}",
         ),
-    ]
+    )
     tamano_a = len(existente.cuerpo)
     tamano_b = len(inexistente.cuerpo)
     tolerancia = max(_TOLERANCIA_MINIMA_BYTES, max(tamano_a, tamano_b) // 20)
-    resultados.append(
+    anotar(
+        contexto,
+        resultados,
         _comparar(
             formulario,
             "consistencia-tamano-cuerpo",
             cuenta,
             abs(tamano_a - tamano_b) <= tolerancia,
             f"diferencia de {abs(tamano_a - tamano_b)} caracteres; tolerancia {tolerancia}",
-        )
+        ),
     )
     return resultados
 

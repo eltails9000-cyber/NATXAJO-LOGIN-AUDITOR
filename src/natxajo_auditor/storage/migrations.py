@@ -673,6 +673,21 @@ MIGRATIONS: tuple[Migration, ...] = (
             "DROP TABLE http_targets",
         ),
     ),
+    Migration(
+        version=15,
+        name="pruebas_motivo_cierre",
+        # Motivo de cierre de cada ejecución del motor de pruebas: distingue la cancelación del
+        # operador, el fallo técnico, el cambio de DNS y la ejecución interrumpida y recuperada.
+        # Columna nueva y nula: las ejecuciones ya cerradas conservan NULL.
+        statements=(
+            (
+                "ALTER TABLE http_runs ADD COLUMN close_reason TEXT CHECK (close_reason IS NULL OR "
+                "close_reason IN ('cancelada_por_operador', 'fallo_tecnico', 'cambio_dns', "
+                "'interrumpida_recuperada'))"
+            ),
+        ),
+        down=("ALTER TABLE http_runs DROP COLUMN close_reason",),
+    ),
 )
 
 # Tablas cuyas filas se pierden al revertir una migración. Con filas dentro, la reversión se niega
@@ -682,6 +697,7 @@ PROTECTED_BY_MIGRATION: dict[int, tuple[str, ...]] = {
     11: ("plugin_quarantine", "plugin_history"),
     12: ("plugin_reviews",),
     14: ("http_targets", "http_runs", "http_results", "http_exports"),
+    15: ("http_runs",),
 }
 
 _BOOKKEEPING = (

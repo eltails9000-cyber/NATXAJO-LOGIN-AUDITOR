@@ -1,20 +1,27 @@
 """Motor de ejecución: aplica los límites a cada petición y produce un resultado por caso.
 
-Controles: presupuesto total de solicitudes, concurrencia, pausa entre peticiones y cancelación. El
-motor no escribe en la base de datos; el servicio persiste los resultados al terminar la ejecución.
-Un caso que no puede completarse queda SKIPPED con su motivo, nunca como PASS.
+Controles: presupuesto total de solicitudes, concurrencia, pausa entre peticiones y cancelación.
+Cada resultado se entrega al sumidero en el momento en que se produce, de modo que el servicio lo
+persiste aunque la ejecución falle después. Un caso que no puede completarse queda SKIPPED con su
+motivo, nunca como PASS.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import threading
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from natxajo_auditor.pruebas.clasificacion import clasificar, evaluar
-from natxajo_auditor.pruebas.cliente import ClienteHttp, Respuesta, Sesion
+from natxajo_auditor.pruebas.cliente import (
+    CambioDnsError,
+    ClienteHttp,
+    InformeTls,
+    Respuesta,
+    Sesion,
+)
 from natxajo_auditor.pruebas.formulario import campos_ocultos, construir_campos
 from natxajo_auditor.pruebas.modelo import (
     Caso,
@@ -68,6 +75,15 @@ class Contexto:
     limites: Limites
     presupuesto: Presupuesto
     cancelacion: threading.Event
+    # Destino de cada resultado en cuanto se produce. None en pruebas que no persisten nada.
+    sumidero: Callable[[ResultadoCaso], None] | None = None
+
+    def reservar(self) -> None:
+        """Comprueba la cancelación y reserva una solicitud del presupuesto."""
+        if self.cancelacion.is_set():
+            raise Detenida("ejecución cancelada por el operador")
+        if not self.presupuesto.reservar():
+            raise Detenida("presupuesto de solicitudes agotado")
 
     def peticion(
         self,
@@ -77,14 +93,34 @@ class Contexto:
         sesion: Sesion,
     ) -> Respuesta:
         """Envía una petición si quedan presupuesto y tiempo. Respeta la pausa configurada."""
-        if self.cancelacion.is_set():
-            raise Detenida("ejecución cancelada por el operador")
-        if not self.presupuesto.reservar():
-            raise Detenida("presupuesto de solicitudes agotado")
-        respuesta = self.cliente.enviar(metodo, ruta, campos, sesion)
+        self.reservar()
+        try:
+            respuesta = self.cliente.enviar(metodo, ruta, campos, sesion)
+        except CambioDnsError:
+            self.cancelacion.set()
+            raise
         if self.limites.pausa_ms > 0:
             self.cancelacion.wait(self.limites.pausa_ms / 1000)
         return respuesta
+
+    def informe_tls(self) -> InformeTls:
+        """Conexión TLS de comprobación. Cuenta como una solicitud del presupuesto."""
+        self.reservar()
+        try:
+            return self.cliente.informe_tls()
+        except CambioDnsError:
+            self.cancelacion.set()
+            raise
+
+    def emitir(self, resultado: ResultadoCaso) -> None:
+        if self.sumidero is not None:
+            self.sumidero(resultado)
+
+
+def anotar(contexto: Contexto, resultados: list[ResultadoCaso], resultado: ResultadoCaso) -> None:
+    """Añade un resultado a la lista de la ejecución y lo entrega al sumidero en el mismo instante."""
+    resultados.append(resultado)
+    contexto.emitir(resultado)
 
 
 def obtener_token(formulario: Formulario, contexto: Contexto, sesion: Sesion) -> str | None:
@@ -102,12 +138,20 @@ def obtener_token(formulario: Formulario, contexto: Contexto, sesion: Sesion) ->
 
 
 def ejecutar_casos(casos: Sequence[Caso], contexto: Contexto) -> list[ResultadoCaso]:
-    """Ejecuta los casos con la concurrencia configurada. El orden de salida es el de entrada."""
+    """Ejecuta los casos con la concurrencia configurada.
+
+    Los resultados se entregan en el orden de entrada aunque se ejecuten en paralelo. Un error
+    inesperado se propaga: los resultados ya entregados quedan persistidos.
+    """
+    resultados: list[ResultadoCaso] = []
     if contexto.limites.concurrencia <= 1:
-        resultados = [_caso(caso, contexto) for caso in casos]
+        for caso in casos:
+            anotar(contexto, resultados, _caso(caso, contexto))
     else:
         with ThreadPoolExecutor(max_workers=contexto.limites.concurrencia) as grupo:
-            resultados = list(grupo.map(lambda caso: _caso(caso, contexto), casos))
+            pendientes = [grupo.submit(_caso, caso, contexto) for caso in casos]
+            for pendiente in pendientes:
+                anotar(contexto, resultados, pendiente.result())
     return numerar(resultados)
 
 

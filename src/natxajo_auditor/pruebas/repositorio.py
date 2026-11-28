@@ -8,7 +8,6 @@ Una ejecución se cierra una única vez, y los resultados solo se insertan mient
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
 from typing import Final
 
 from natxajo_auditor.core.exceptions import ValidationError
@@ -76,6 +75,46 @@ class RepositorioPruebas:
             (run_id, suite, origen, esquema_sha256, usuario, iniciado_en, casos),
         )
 
+    def registrar_resultado(
+        self,
+        conexion: sqlite3.Connection,
+        run_id: str,
+        resultado: ResultadoCaso,
+    ) -> None:
+        """Añade un resultado a una ejecución en curso. La clave (ejecución, posición) impide duplicarlo."""
+        conexion.execute(
+            f"INSERT INTO http_results ({_RESULTADO_CAMPOS}, run_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                resultado.posicion,
+                resultado.caso_id,
+                resultado.formulario_id,
+                resultado.tipo,
+                resultado.cuenta,
+                resultado.resultado.value,
+                resultado.esperado,
+                resultado.observado,
+                resultado.codigo_http,
+                resultado.duracion_ms,
+                resultado.motivo,
+                run_id,
+            ),
+        )
+
+    def progreso(self, conexion: sqlite3.Connection, run_id: str, solicitudes: int) -> None:
+        """Guarda cuántas solicitudes llevan enviadas. Así una ejecución interrumpida conserva su avance."""
+        conexion.execute(
+            "UPDATE http_runs SET requests = ? WHERE id = ? AND status = 'en_curso'",
+            (solicitudes, run_id),
+        )
+
+    def conteo_resultados(self, conexion: sqlite3.Connection, run_id: str) -> dict[str, int]:
+        filas = conexion.execute(
+            "SELECT outcome, COUNT(*) FROM http_results WHERE run_id = ? GROUP BY outcome",
+            (run_id,),
+        ).fetchall()
+        return {resultado: cantidad for resultado, cantidad in filas}
+
     def cerrar_ejecucion(
         self,
         conexion: sqlite3.Connection,
@@ -84,31 +123,23 @@ class RepositorioPruebas:
         estado: str,
         terminado_en: str,
         solicitudes: int,
-        resultados: Sequence[ResultadoCaso],
+        motivo: str | None,
     ) -> None:
-        for r in resultados:
-            conexion.execute(
-                f"INSERT INTO http_results ({_RESULTADO_CAMPOS}, run_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    r.posicion,
-                    r.caso_id,
-                    r.formulario_id,
-                    r.tipo,
-                    r.cuenta,
-                    r.resultado.value,
-                    r.esperado,
-                    r.observado,
-                    r.codigo_http,
-                    r.duracion_ms,
-                    r.motivo,
-                    run_id,
-                ),
-            )
+        """Cierra una ejecución en curso. El disparador impide cerrarla dos veces."""
         conexion.execute(
-            "UPDATE http_runs SET status = ?, finished_at = ?, requests = ? WHERE id = ?",
-            (estado, terminado_en, solicitudes, run_id),
+            "UPDATE http_runs SET status = ?, finished_at = ?, requests = ?, close_reason = ? "
+            "WHERE id = ?",
+            (estado, terminado_en, solicitudes, motivo, run_id),
         )
+
+    def ejecuciones_en_curso(self) -> list[tuple[str, int]]:
+        """Ejecuciones sin cerrar, con las solicitudes registradas hasta su último resultado."""
+        return [
+            (id_, solicitudes)
+            for id_, solicitudes in self._db.fetchall(
+                "SELECT id, requests FROM http_runs WHERE status = 'en_curso' ORDER BY started_at"
+            )
+        ]
 
     def ejecuciones(self, limite: int) -> list[dict[str, object]]:
         filas = self._db.fetchall(
@@ -119,10 +150,10 @@ class RepositorioPruebas:
         return [_ejecucion_resumen(fila) for fila in filas]
 
     def ejecucion(self, run_id: str) -> dict[str, object] | None:
-        # La huella del esquema va al final: _ejecucion_resumen lee las nueve primeras columnas en orden.
+        # Huella y motivo de cierre van al final: _ejecucion_resumen lee las nueve primeras columnas.
         cabecera = self._db.fetchall(
             "SELECT id, suite, origin, requested_by, started_at, finished_at, status, cases, "
-            "requests, schema_sha256 FROM http_runs WHERE id = ?",
+            "requests, schema_sha256, close_reason FROM http_runs WHERE id = ?",
             (run_id,),
         )
         if not cabecera:
@@ -133,6 +164,7 @@ class RepositorioPruebas:
         )
         ejecucion = _ejecucion_resumen(cabecera[0])
         ejecucion["esquema_sha256"] = cabecera[0][9]
+        ejecucion["motivo_cierre"] = cabecera[0][10]
         ejecucion["resultados"] = [_resultado_registro(fila) for fila in filas]
         return ejecucion
 
