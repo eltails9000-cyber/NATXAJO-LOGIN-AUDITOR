@@ -21,6 +21,7 @@ from natxajo_auditor.core.contracts import (
     AUDIT_RUN_PERMISSION,
     CLEANUP_PERMISSION,
     DIAGNOSTIC_PERMISSION,
+    HTTP_READ_PERMISSION,
     PLATFORM_COMPANY,
     PLUGIN_QUARANTINE_PERMISSION,
     PLUGIN_QUARANTINE_RELEASE_PERMISSION,
@@ -63,12 +64,13 @@ from natxajo_auditor.interfaces.terminal.operaciones_plugins import (
     plugin_status,
     plugin_update,
 )
+from natxajo_auditor.interfaces.terminal.pruebas import pruebas_http
 from natxajo_auditor.kernel.kernel import Kernel
 
 PENDING_FEATURES = (
     "Instalación, habilitación y desinstalación de plugins desde la terminal (fase 6)",
     "Motor de automatización (fase 8)",
-    "Auditoría activa de sistemas (TLS, HTTP, formularios): requiere registro de alcance",
+    "Auditoría activa de sistemas fuera de HTTP (red, puertos y servicios): no implementada",
     "Restauración de copias desde la terminal: la operación existe, falta exponerla",
     "Interfaz de escritorio (fase 10)",
     "Ejecución de módulos y plugins (sin fase asignada)",
@@ -723,6 +725,15 @@ _OPTIONS: dict[str, Option] = {
             True,
             plugin_rollback,
             scope=SCOPE_PLATFORM,
+            guarded=True,
+        ),
+        # El submenú aplica el guardián en cada acción a través del servicio de pruebas.
+        Option(
+            "34",
+            "Pruebas HTTP y formularios",
+            HTTP_READ_PERMISSION,
+            False,
+            pruebas_http,
             guarded=True,
         ),
     )
