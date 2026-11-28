@@ -114,6 +114,18 @@ def seguridad_consistencia(ctx: Contexto, args: argparse.Namespace) -> Salida:
     return _ejecutar_procedimiento(ctx, args, "response-check", args.formulario or "login")
 
 
+def seguridad_cabeceras(ctx: Contexto, args: argparse.Namespace) -> Salida:
+    return _ejecutar_procedimiento(ctx, args, "security-headers", args.formulario or "login")
+
+
+def seguridad_tls(ctx: Contexto, args: argparse.Namespace) -> Salida:
+    return _ejecutar_procedimiento(ctx, args, "tls", args.formulario or "login")
+
+
+def seguridad_tiempos(ctx: Contexto, args: argparse.Namespace) -> Salida:
+    return _ejecutar_procedimiento(ctx, args, "timing", args.formulario or "login")
+
+
 # ----- Solicitudes -----------------------------------------------------------------------------
 
 

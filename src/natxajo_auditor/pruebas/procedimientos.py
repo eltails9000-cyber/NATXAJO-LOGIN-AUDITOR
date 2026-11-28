@@ -1,4 +1,5 @@
-"""Procedimientos de seguridad: límite de intentos, CSRF, MFA, cookies de sesión y consistencia.
+"""Procedimientos de seguridad: límite de intentos, CSRF, MFA, cookies, consistencia, cabeceras,
+TLS y tiempos de respuesta.
 
 Cada procedimiento es una secuencia pequeña y acotada de peticiones. Todas pasan por el mismo
 presupuesto y el mismo control de cancelación que las matrices. Ninguno intenta eludir un control:
@@ -8,6 +9,8 @@ si el servidor bloquea, el procedimiento se detiene y no reintenta.
 from __future__ import annotations
 
 import dataclasses
+import re
+import statistics
 from collections.abc import Callable
 from typing import Final
 
@@ -515,10 +518,257 @@ def _comparar(
     )
 
 
+# ----- Cabeceras de seguridad, TLS y tiempos de respuesta -------------------------------------
+
+DIAS_MINIMOS_CERTIFICADO: Final = 30
+PROTOCOLOS_TLS_ADMITIDOS: Final = ("TLSv1.2", "TLSv1.3")
+HSTS_MINIMO_S: Final = 15_552_000  # 180 días
+POLITICAS_REFERRER_SEGURAS: Final = frozenset(
+    {"no-referrer", "same-origin", "strict-origin", "strict-origin-when-cross-origin"}
+)
+MUESTRAS_TIEMPO: Final = 5
+TIEMPO_MINIMO_MS: Final = 100.0
+TIEMPO_RELATIVO: Final = 0.5
+
+
+def cabeceras_de_seguridad(
+    contexto: Contexto,
+    formulario: Formulario,
+    credencial: Credencial,
+    cuenta: str,
+) -> list[ResultadoCaso]:
+    """Cabeceras de seguridad de la página del formulario. Una sola petición GET, sin credenciales."""
+    try:
+        respuesta = contexto.peticion("GET", formulario.ruta, None, Sesion())
+    except (Detenida, FalloTecnico) as exc:
+        return [interrupcion(formulario, "cabeceras-interrumpida", cuenta, exc)]
+    if respuesta.error is not None:
+        return [
+            resultado_de(
+                formulario,
+                "cabeceras-sin-respuesta",
+                cuenta,
+                "cumple",
+                Resultado.ERROR,
+                "error",
+                respuesta.error,
+                respuesta,
+            )
+        ]
+    https = contexto.cliente.origen.https
+    resultados: list[ResultadoCaso] = []
+    for caso_id, cumple, motivo in _controles_de_cabeceras(respuesta, https):
+        anotar(
+            contexto,
+            resultados,
+            _comparar(formulario, caso_id, cuenta, cumple, motivo, respuesta),
+        )
+    return resultados
+
+
+def _controles_de_cabeceras(respuesta: Respuesta, https: bool) -> list[tuple[str, bool, str]]:
+    csp = respuesta.cabecera_de_seguridad("content-security-policy")
+    nosniff = (respuesta.cabecera_de_seguridad("x-content-type-options") or "").strip().lower()
+    encuadre = (respuesta.cabecera_de_seguridad("x-frame-options") or "").strip().upper()
+    referrer = (respuesta.cabecera_de_seguridad("referrer-policy") or "").strip().lower()
+    hsts = respuesta.cabecera_de_seguridad("strict-transport-security")
+    frame_ancestors = csp is not None and "frame-ancestors" in csp.lower()
+    edad = _max_age(hsts)
+    return [
+        (
+            "cabecera-csp",
+            csp is not None,
+            f"Content-Security-Policy {'presente' if csp is not None else 'ausente'}",
+        ),
+        (
+            "cabecera-nosniff",
+            nosniff == "nosniff",
+            f"X-Content-Type-Options: {nosniff or 'ausente'}",
+        ),
+        (
+            "cabecera-encuadre",
+            encuadre in ("DENY", "SAMEORIGIN") or frame_ancestors,
+            (
+                f"X-Frame-Options={encuadre or 'ausente'}; "
+                f"frame-ancestors {'presente' if frame_ancestors else 'ausente'}"
+            ),
+        ),
+        (
+            "cabecera-referrer",
+            referrer in POLITICAS_REFERRER_SEGURAS,
+            f"Referrer-Policy: {referrer or 'ausente'}",
+        ),
+        (
+            "cabecera-hsts",
+            https and edad is not None and edad >= HSTS_MINIMO_S,
+            _motivo_hsts(hsts, https, edad),
+        ),
+    ]
+
+
+def _max_age(valor: str | None) -> int | None:
+    if valor is None:
+        return None
+    coincidencia = re.search(r'max-age\s*=\s*"?(\d+)', valor, re.IGNORECASE)
+    return int(coincidencia.group(1)) if coincidencia else None
+
+
+def _motivo_hsts(valor: str | None, https: bool, edad: int | None) -> str:
+    if not https:
+        return "HSTS solo tiene efecto sobre HTTPS; el objetivo no usa HTTPS"
+    if valor is None:
+        return "Strict-Transport-Security ausente"
+    if edad is None:
+        return "Strict-Transport-Security sin max-age"
+    return f"Strict-Transport-Security max-age={edad} s (mínimo {HSTS_MINIMO_S})"
+
+
+def verificar_tls(
+    contexto: Contexto,
+    formulario: Formulario,
+    credencial: Credencial,
+    cuenta: str,
+) -> list[ResultadoCaso]:
+    """Certificado verificado, protocolo admitido y días hasta su caducidad. Una conexión TLS."""
+    try:
+        informe = contexto.informe_tls()
+    except (Detenida, FalloTecnico) as exc:
+        return [interrupcion(formulario, "tls-interrumpido", cuenta, exc)]
+    motivo = (
+        "certificado verificado con la autoridad de confianza"
+        if informe.verificado
+        else (informe.motivo or "certificado no verificado")
+    )
+    resultados: list[ResultadoCaso] = []
+    anotar(
+        contexto,
+        resultados,
+        _comparar(formulario, "tls-verificacion", cuenta, informe.verificado, motivo),
+    )
+    if informe.verificado:
+        anotar(
+            contexto,
+            resultados,
+            _comparar(
+                formulario,
+                "tls-protocolo",
+                cuenta,
+                informe.protocolo in PROTOCOLOS_TLS_ADMITIDOS,
+                f"protocolo negociado: {informe.protocolo or 'desconocido'}",
+            ),
+        )
+        anotar(contexto, resultados, _caducidad(formulario, cuenta, informe.dias_restantes))
+    else:
+        for caso_id, texto in (
+            ("tls-protocolo", "no se negoció TLS verificado; protocolo no analizado"),
+            ("tls-caducidad", "sin certificado verificado; caducidad no analizada"),
+        ):
+            anotar(
+                contexto,
+                resultados,
+                resultado_de(formulario, caso_id, cuenta, "cumple", Resultado.SKIPPED, "", texto),
+            )
+    return resultados
+
+
+def _caducidad(formulario: Formulario, cuenta: str, dias: int | None) -> ResultadoCaso:
+    if dias is None:
+        return resultado_de(
+            formulario,
+            "tls-caducidad",
+            cuenta,
+            "cumple",
+            Resultado.SKIPPED,
+            "",
+            "fecha de caducidad no disponible",
+        )
+    return _comparar(
+        formulario,
+        "tls-caducidad",
+        cuenta,
+        dias >= DIAS_MINIMOS_CERTIFICADO,
+        f"el certificado caduca en {dias} días (mínimo {DIAS_MINIMOS_CERTIFICADO})",
+    )
+
+
+def tiempos_de_respuesta(
+    contexto: Contexto,
+    formulario: Formulario,
+    credencial: Credencial,
+    cuenta: str,
+) -> list[ResultadoCaso]:
+    """Tiempo mediano de respuesta ante una cuenta existente y otra inexistente, en muestras alternas.
+
+    Una diferencia grande permite distinguir las cuentas por el tiempo, aunque el mensaje sea igual.
+    """
+    existentes: list[float] = []
+    inexistentes: list[float] = []
+    try:
+        for _ in range(MUESTRAS_TIEMPO):
+            for muestras, identidad in (
+                (existentes, identidad_de(formulario, credencial)),
+                (inexistentes, identidad_inexistente(formulario)),
+            ):
+                respuesta = _intento(contexto, formulario, identidad)
+                if respuesta.error is not None:
+                    return [
+                        resultado_de(
+                            formulario,
+                            "tiempos-sin-respuesta",
+                            cuenta,
+                            "cumple",
+                            Resultado.ERROR,
+                            "error",
+                            respuesta.error,
+                            respuesta,
+                        )
+                    ]
+                muestras.append(float(respuesta.duracion_ms))
+    except (Detenida, FalloTecnico) as exc:
+        return [interrupcion(formulario, "tiempos-interrumpidos", cuenta, exc)]
+    mediana_a = statistics.median(existentes)
+    mediana_b = statistics.median(inexistentes)
+    diferencia = abs(mediana_a - mediana_b)
+    umbral = max(TIEMPO_MINIMO_MS, TIEMPO_RELATIVO * min(mediana_a, mediana_b))
+    resultados: list[ResultadoCaso] = []
+    anotar(
+        contexto,
+        resultados,
+        _comparar(
+            formulario,
+            "tiempos-diferencia",
+            cuenta,
+            diferencia <= umbral,
+            f"medianas de {MUESTRAS_TIEMPO} muestras: cuenta existente {mediana_a:.0f} ms, "
+            f"inexistente {mediana_b:.0f} ms; diferencia {diferencia:.0f} ms, umbral {umbral:.0f} ms",
+        ),
+    )
+    return resultados
+
+
+def _intento(contexto: Contexto, formulario: Formulario, identidad: str) -> Respuesta:
+    sesion = Sesion()
+    token = obtener_token(formulario, contexto, sesion)
+    return contexto.peticion(
+        "POST",
+        formulario.ruta,
+        construir_campos(
+            formulario,
+            identidad=identidad,
+            contrasena=CONTRASENA_INCORRECTA,
+            token=token,
+        ),
+        sesion,
+    )
+
+
 PROCEDIMIENTOS: Final[dict[str, Procedimiento]] = {
     "rate-limit": limite_de_frecuencia,
     "csrf": proteccion_csrf,
     "mfa": prueba_mfa,
     "sessions": atributos_de_cookies,
     "response-check": consistencia_de_respuestas,
+    "security-headers": cabeceras_de_seguridad,
+    "tls": verificar_tls,
+    "timing": tiempos_de_respuesta,
 }

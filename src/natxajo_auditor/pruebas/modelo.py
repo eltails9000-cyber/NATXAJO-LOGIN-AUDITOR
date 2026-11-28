@@ -178,4 +178,7 @@ PROCEDURES: Final[Mapping[str, str]] = {
     "mfa": "Primer factor, código incorrecto y código de prueba válido.",
     "sessions": "Atributos HttpOnly, Secure y SameSite de las cookies de sesión.",
     "response-check": "Diferencias de respuesta entre una cuenta existente y una inexistente.",
+    "security-headers": "CSP, nosniff, protección frente a encuadre, Referrer-Policy y HSTS.",
+    "tls": "Certificado verificado, protocolo TLS admitido y días hasta su caducidad.",
+    "timing": "Tiempo mediano de respuesta: cuenta existente frente a inexistente, con cinco muestras.",
 }

@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -18,46 +18,18 @@ import pytest
 
 from natxajo_auditor.core.exceptions import AuthorizationError, ValidationError
 from natxajo_auditor.kernel.composition import DATABASE
-from natxajo_auditor.kernel.context import RuntimeContext
 from natxajo_auditor.kernel.kernel import Kernel
 from natxajo_auditor.pruebas.repositorio import RepositorioPruebas
-from tests.conftest import ADMIN_PASSWORD, ADMIN_USER, install_administrator
+from tests.conftest import ADMIN_PASSWORD, ADMIN_USER
 from tests.laboratorio_http import (
     CLAVE_A,
     CLAVE_B,
-    LIMITES_PRUEBA,
     Escenario,
     LaboratorioHttp,
-    entorno_de_prueba,
-    escribir_configuracion,
 )
 
 OPERADOR = "operador-prueba"
 CLAVE_OPERADOR = "contraseña-de-operador-1"
-
-
-@pytest.fixture
-def entorno(monkeypatch: pytest.MonkeyPatch) -> None:
-    for nombre, valor in entorno_de_prueba().items():
-        monkeypatch.setenv(nombre, valor)
-
-
-@pytest.fixture
-def arrancar(context: RuntimeContext, entorno: None) -> Iterator[Callable[..., Kernel]]:
-    """Arranca la plataforma con configuración de prueba y la detiene al terminar la prueba."""
-    kernels: list[Kernel] = []
-
-    def _crear(**limites: Any) -> Kernel:
-        escribir_configuracion(context.config_dir, limites={**LIMITES_PRUEBA, **limites})
-        kernel = Kernel(context, password_iterations=1_000)
-        kernel.start()
-        install_administrator(kernel)
-        kernels.append(kernel)
-        return kernel
-
-    yield _crear
-    for kernel in kernels:
-        kernel.stop()
 
 
 @pytest.fixture

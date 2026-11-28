@@ -146,6 +146,27 @@ def construir_parser() -> argparse.ArgumentParser:
         ejecuta=True,
     )
     arbol.hoja(
+        ("security", "headers"),
+        "comprueba las cabeceras de seguridad de la página del formulario",
+        c.seguridad_cabeceras,
+        [comunes, ejecucion],
+        ejecuta=True,
+    )
+    arbol.hoja(
+        ("security", "tls"),
+        "comprueba el certificado, el protocolo TLS y su caducidad",
+        c.seguridad_tls,
+        [comunes, ejecucion],
+        ejecuta=True,
+    )
+    arbol.hoja(
+        ("security", "timing"),
+        "compara el tiempo de respuesta de una cuenta existente y otra inexistente",
+        c.seguridad_tiempos,
+        [comunes, ejecucion],
+        ejecuta=True,
+    )
+    arbol.hoja(
         ("requests", "history"),
         "lista las ejecuciones registradas",
         c.solicitudes_historial,

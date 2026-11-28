@@ -98,7 +98,16 @@ def test_los_catalogos_de_la_cli_coinciden_con_el_motor() -> None:
     assert set(SUITES_FORMULARIOS) <= set(SUITES)
     assert set(SUITES_CUENTAS) <= set(SUITES)
     assert set(FORMATOS) == set(FORMATOS_MOTOR)
-    assert {"rate-limit", "csrf", "mfa", "sessions", "response-check"} == set(PROCEDURES)
+    assert {
+        "rate-limit",
+        "csrf",
+        "mfa",
+        "sessions",
+        "response-check",
+        "security-headers",
+        "tls",
+        "timing",
+    } == set(PROCEDURES)
 
 
 def test_forms_list_muestra_los_formularios_configurados(cli_kernel: Kernel) -> None:

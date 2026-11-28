@@ -9,6 +9,7 @@ from natxajo_auditor.core import ed25519
 from natxajo_auditor.kernel.context import RuntimeContext
 from natxajo_auditor.kernel.kernel import Kernel
 from natxajo_auditor.plugins.package import build_package
+from tests.laboratorio_http import LIMITES_PRUEBA, entorno_de_prueba, escribir_configuracion
 
 PLUGIN_SECRET = bytes(range(1, 33))
 PLUGIN_KEY_ID = "editor_pruebas"
@@ -155,3 +156,30 @@ def register_publisher(kernel: Kernel, platform_token: str) -> Callable[..., Non
         )
 
     return _register
+
+
+# ----- Plataforma para pruebas HTTP -------------------------------------------------------
+
+
+@pytest.fixture
+def entorno(monkeypatch: pytest.MonkeyPatch) -> None:
+    for nombre, valor in entorno_de_prueba().items():
+        monkeypatch.setenv(nombre, valor)
+
+
+@pytest.fixture
+def arrancar(context: RuntimeContext, entorno: None) -> Iterator[Callable[..., Kernel]]:
+    """Arranca la plataforma con configuración de prueba y la detiene al terminar la prueba."""
+    kernels: list[Kernel] = []
+
+    def _crear(**limites: Any) -> Kernel:
+        escribir_configuracion(context.config_dir, limites={**LIMITES_PRUEBA, **limites})
+        kernel = Kernel(context, password_iterations=1_000)
+        kernel.start()
+        install_administrator(kernel)
+        kernels.append(kernel)
+        return kernel
+
+    yield _crear
+    for kernel in kernels:
+        kernel.stop()

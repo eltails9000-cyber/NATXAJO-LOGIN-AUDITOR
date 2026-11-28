@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import json
 import secrets
+import shutil
+import ssl
+import subprocess
 import threading
 import time
 from collections.abc import Mapping
@@ -63,6 +66,14 @@ class Escenario:
     umbral_bloqueo: int = 1000
     fallar_500: bool = False
     retardo_s: float = 0.0
+    # Cabeceras de seguridad en todas las respuestas, sin ellas el servidor es vulnerable a propósito.
+    cabeceras_seguridad: bool = False
+    # Atributo Secure en la cookie de sesión (solo tiene sentido con HTTPS).
+    cookie_secure: bool = False
+    # Retardo solo para cuentas existentes: permite detectar diferencias de tiempo entre cuentas.
+    retardo_cuenta_existente_s: float = 0.0
+    # (certificado, clave) en PEM. Si se indica, el servidor sirve HTTPS.
+    certificado: tuple[Path, Path] | None = None
 
 
 class LaboratorioHttp:
@@ -81,11 +92,25 @@ class LaboratorioHttp:
         self.rutas_visitadas: list[str] = []
         self._servidor = ThreadingHTTPServer(("127.0.0.1", 0), _manejador_para(self))
         self._servidor.daemon_threads = True
+        if self.escenario.certificado is not None:
+            certificado, clave = self.escenario.certificado
+            contexto = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            contexto.load_cert_chain(certificado, clave)
+            # El handshake se hace en el hilo de cada petición, no en el bucle de aceptación.
+            self._servidor.socket = contexto.wrap_socket(
+                self._servidor.socket, server_side=True, do_handshake_on_connect=False
+            )
         self._hilo = threading.Thread(target=self._servidor.serve_forever, daemon=True)
 
     @property
     def origen(self) -> str:
-        return f"http://127.0.0.1:{self._servidor.server_address[1]}"
+        esquema = "https" if self.escenario.certificado is not None else "http"
+        return f"{esquema}://127.0.0.1:{self._servidor.server_address[1]}"
+
+    def _cabeceras_fijas(self) -> tuple[tuple[str, str], ...]:
+        if not self.escenario.cabeceras_seguridad:
+            return ()
+        return CABECERAS_SEGURAS
 
     def __enter__(self) -> Self:
         self._hilo.start()
@@ -165,6 +190,8 @@ class LaboratorioHttp:
             _enviar(manejador, 429, MENSAJE_BLOQUEO)
             return
         cuenta = self._buscar(identidad, correo)
+        if cuenta is not None and self.escenario.retardo_cuenta_existente_s > 0:
+            time.sleep(self.escenario.retardo_cuenta_existente_s)
         if cuenta is None or cuenta.clave != clave:
             self._registrar_fallo(identidad)
             if cuenta is None and self.escenario.revelar_usuario:
@@ -265,11 +292,15 @@ class LaboratorioHttp:
         atributos = f"{nombre}={valor}; Path=/; SameSite=Lax"
         if self.escenario.cookie_httponly:
             atributos += "; HttpOnly"
+        if self.escenario.cookie_secure:
+            atributos += "; Secure"
         return atributos
 
 
 def _manejador_para(laboratorio: LaboratorioHttp) -> type[BaseHTTPRequestHandler]:
     class Manejador(BaseHTTPRequestHandler):
+        cabeceras_fijas = laboratorio._cabeceras_fijas()
+
         def log_message(self, format: str, *args: Any) -> None:
             return
 
@@ -322,13 +353,70 @@ def _enviar(
 ) -> None:
     datos = cuerpo.encode("utf-8")
     manejador.send_response(codigo)
-    for nombre, valor in cabeceras or []:
+    # Las cabeceras fijas las aporta el manejador del escenario (vacío salvo cabeceras_seguridad).
+    fijas: tuple[tuple[str, str], ...] = getattr(manejador, "cabeceras_fijas", ())
+    for nombre, valor in [*fijas, *(cabeceras or [])]:
         manejador.send_header(nombre, valor)
     manejador.send_header("Content-Type", "text/html; charset=utf-8")
     manejador.send_header("Content-Length", str(len(datos)))
     manejador.end_headers()
     if datos:
         manejador.wfile.write(datos)
+
+
+CABECERAS_SEGURAS: Final[tuple[tuple[str, str], ...]] = (
+    ("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'"),
+    ("X-Content-Type-Options", "nosniff"),
+    ("X-Frame-Options", "DENY"),
+    ("Referrer-Policy", "no-referrer"),
+    ("Permissions-Policy", "camera=(), microphone=()"),
+    ("Strict-Transport-Security", "max-age=31536000; includeSubDomains"),
+)
+
+
+class OpensslNoDisponible(RuntimeError):
+    """No hay openssl en el PATH: las pruebas de HTTPS no pueden generar su certificado."""
+
+
+def generar_certificado(directorio: Path, dias: int = 365) -> tuple[Path, Path]:
+    """Certificado autofirmado para 127.0.0.1 con openssl. Su clave solo vive en el directorio temporal.
+
+    El certificado se marca como autoridad para que el cliente pueda confiar en él explícitamente.
+    Nunca se usa el almacén del sistema: las pruebas confían solo en este certificado.
+    """
+    openssl = shutil.which("openssl")
+    if openssl is None:
+        raise OpensslNoDisponible("no se encontró openssl en el PATH")
+    certificado = directorio / "laboratorio-cert.pem"
+    clave = directorio / "laboratorio-clave.pem"
+    subprocess.run(
+        [
+            openssl,
+            "req",
+            "-x509",
+            "-newkey",
+            "ec",
+            "-pkeyopt",
+            "ec_paramgen_curve:prime256v1",
+            "-nodes",
+            "-keyout",
+            str(clave),
+            "-out",
+            str(certificado),
+            "-days",
+            str(dias),
+            "-subj",
+            "/CN=127.0.0.1",
+            "-addext",
+            "subjectAltName=IP:127.0.0.1",
+            "-addext",
+            "basicConstraints=critical,CA:TRUE",
+        ],
+        check=True,
+        capture_output=True,
+        timeout=120,
+    )
+    return certificado, clave
 
 
 # ----- Configuración de prueba -----------------------------------------------------------------

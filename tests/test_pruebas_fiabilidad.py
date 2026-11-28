@@ -10,7 +10,7 @@ from __future__ import annotations
 import socket
 import sqlite3
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -23,39 +23,13 @@ from natxajo_auditor.pruebas import motor
 from natxajo_auditor.pruebas.cliente import CambioDnsError
 from natxajo_auditor.pruebas.modelo import Resultado, ResultadoCaso
 from natxajo_auditor.pruebas.repositorio import RepositorioPruebas
-from tests.conftest import ADMIN_USER, install_administrator
+from tests.conftest import ADMIN_USER
 from tests.laboratorio_http import (
-    LIMITES_PRUEBA,
     LaboratorioHttp,
-    entorno_de_prueba,
-    escribir_configuracion,
 )
 from tests.test_pruebas_http import _admin, _ejecuciones, _estados, _objetivo, _suite
 
 ORIGEN_HUERFANO = "http://127.0.0.1:9"
-
-
-@pytest.fixture
-def entorno(monkeypatch: pytest.MonkeyPatch) -> None:
-    for nombre, valor in entorno_de_prueba().items():
-        monkeypatch.setenv(nombre, valor)
-
-
-@pytest.fixture
-def arrancar(context: RuntimeContext, entorno: None) -> Iterator[Callable[..., Kernel]]:
-    kernels: list[Kernel] = []
-
-    def _crear(**limites: Any) -> Kernel:
-        escribir_configuracion(context.config_dir, limites={**LIMITES_PRUEBA, **limites})
-        kernel = Kernel(context, password_iterations=1_000)
-        kernel.start()
-        install_administrator(kernel)
-        kernels.append(kernel)
-        return kernel
-
-    yield _crear
-    for kernel in kernels:
-        kernel.stop()
 
 
 def _resultado(posicion: int, resultado: Resultado = Resultado.PASS) -> ResultadoCaso:
