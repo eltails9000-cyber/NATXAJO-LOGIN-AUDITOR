@@ -2,6 +2,25 @@
 
 ## [Sin publicar]
 
+- Etapa 5: motor de pruebas HTTP y formularios (rama `etapa-5-motor-http`).
+  - CLI `natxajo` (y `python main.py <grupo>`): `forms`, `auth`, `security`, `requests`, `reports`,
+    `test`, `targets` y `accounts`. Lanzadores `natxajo.cmd` y `natxajo.ps1`, sin ejecutar en Windows.
+  - Objetivos registrados con confirmación y orígenes validados. Las peticiones no siguen
+    redirecciones.
+  - Resultados PASS, FAIL, BLOCKED, ERROR y SKIPPED. Códigos de salida 0 a 4.
+  - Cuentas sintéticas con contraseña en variables de entorno (`NATXAJO_PRUEBA_…`); el error nombra la
+    variable, nunca su valor.
+  - Migración 14: `http_targets`, `http_runs`, `http_results` y `http_exports`, añadir-solo.
+  - Permisos `pruebas:nucleo:*`. Registrar objetivos y ejecutar pruebas son operaciones críticas.
+  - Eventos `pruebas.objetivo_registrado`, `pruebas.ejecucion_iniciada`, `pruebas.ejecucion_terminada`
+    y `pruebas.informe_exportado`.
+  - Informes JSON, CSV, HTML y TXT en `reports/pruebas/`, verificables por SHA-256.
+  - Servidor de laboratorio en `tests/laboratorio_http.py`.
+  - Cambios de expectativa, no ocultaciones: la migración esperada pasa de 13 a 14 en
+    `tests/test_storage.py`, `tests/test_migrations_stage2.py`, `tests/test_migraciones_etapa4.py` y
+    `tests/test_migracion_11.py`; la arquitectura admite el paquete `pruebas`.
+  - Pendiente: pruebas de TLS y cabeceras; GUI y terminal sin operaciones de pruebas; Windows sin
+    verificar; recuperación de ejecuciones interrumpidas. Detalle en `docs/PRUEBAS_HTTP.md`.
 - Etapa 4.1: endurecimiento posterior a la fusión de la etapa 4 (rama
   `etapa-4-1-endurecimiento`).
   - Sesiones: visitantes anónimos (256) y sesiones autenticadas (64) tienen límites separados. Con

@@ -11,6 +11,22 @@ from pathlib import Path
 
 Clock = Callable[[], datetime]
 
+# Celdas que una hoja de cálculo interpretaría como fórmula. Se neutralizan con una comilla previa.
+FORMULA_PREFIXES: tuple[str, ...] = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_cell(value: object) -> str:
+    """Texto de una celda CSV segura: sin formulas ejecutables y con booleanos en minúsculas."""
+    if value is None:
+        text = ""
+    elif isinstance(value, bool):
+        text = "true" if value else "false"
+    else:
+        text = str(value)
+    if text.startswith(FORMULA_PREFIXES):
+        return "'" + text
+    return text
+
 
 def utc_now() -> datetime:
     """Instante actual con zona horaria UTC. Es el reloj por defecto del núcleo."""

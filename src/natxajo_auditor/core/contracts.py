@@ -45,6 +45,12 @@ SESSION_READ_PERMISSION = "seguridad:nucleo:sesion:leer"
 COMPANY_READ_PERMISSION = "seguridad:nucleo:empresa:leer"
 MODULE_READ_PERMISSION = "modulos:nucleo:modulo:leer"
 MODULE_EXECUTE_PERMISSION = "modulos:nucleo:modulo:ejecutar"
+# Pruebas HTTP de autenticación. Registrar un objetivo y ejecutar pruebas activas son críticos:
+# exigen confirmación y reautenticación. Leer resultados y exportar informes no lo son.
+HTTP_TARGET_PERMISSION = "pruebas:nucleo:objetivo:administrar"
+HTTP_RUN_PERMISSION = "pruebas:nucleo:ejecucion:ejecutar"
+HTTP_READ_PERMISSION = "pruebas:nucleo:resultado:leer"
+HTTP_EXPORT_PERMISSION = "pruebas:nucleo:informe:escribir"
 
 T = TypeVar("T")
 

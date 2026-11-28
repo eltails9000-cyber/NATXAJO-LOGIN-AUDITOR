@@ -10,7 +10,7 @@ aparece en el documento maestro.
   la etapa 3). No fusionada en `main`. La etapa 2 aplicó las tres decisiones aprobadas: modelo
   multiempresa con `company_id` fijado por el servidor, instalador del primer administrador con
   código de un solo uso, y bus de eventos integrado con la auditoría. La etapa 1 (auditoría) está
-  en `docs/CLAUDE_ARCHITECTURE_AUDIT.md`. La etapa 4 (auditoría, informes y mantenimiento) está en la rama `etapa-4-auditoria-informes-mantenimiento`, con su matriz en `docs/MATRIZ_ETAPA_4.md`. Las etapas 5 a 16 no se han iniciado.
+  en `docs/CLAUDE_ARCHITECTURE_AUDIT.md`. La etapa 4 (auditoría, informes y mantenimiento) está en la rama `etapa-4-auditoria-informes-mantenimiento`, con su matriz en `docs/MATRIZ_ETAPA_4.md`. La etapa 5 (motor de pruebas HTTP y formularios) está en la rama `etapa-5-motor-http`, sin fusionar, con su guía en `docs/PRUEBAS_HTTP.md`. La otra especificación titulada etapa 5 (`771fc6bf`) no se ha aplicado. Las etapas 6 a 16 no se han iniciado en esta rama.
 - **Fase del repositorio:** 7 (seguridad y RBAC), en estado parcial. La etapa 2 se integra en esta
   fase. Las fases 3 a 6 no cambian de estado en esta etapa.
 
@@ -35,7 +35,7 @@ aparece en el documento maestro.
 | 6 | Plugins: firma, integridad, editores, catálogo, revisión y ciclo de vida | PARCIAL |
 | 7 | Seguridad, RBAC, sesiones, guardián, multiempresa, instalador y bus de eventos (etapa 2) | PARCIAL |
 | 8 | Motor de automatización | PENDIENTE |
-| 9 | Motor de auditoría defensiva: evaluación sin conexión (etapa 4). Pruebas activas pendientes | PARCIAL |
+| 9 | Motor de auditoría defensiva: evaluación sin conexión (etapa 4). Pruebas HTTP y de formularios contra objetivos registrados (etapa 5). TLS y cabeceras HTTP pendientes | PARCIAL |
 | 10 | Aplicación de escritorio y terminal avanzada | PENDIENTE |
 | 11 | Diagnósticos, informes y analítica: informes JSON, CSV, HTML y TXT con verificación (etapa 4). Analítica pendiente | PARCIAL |
 | 12 | Mantenimiento, actualizaciones y recuperación: diagnóstico, limpieza de temporales y comprobación de migraciones (etapa 4). Restauración desde la terminal y actualizaciones pendientes | PARCIAL |
@@ -285,7 +285,7 @@ y la etapa 4 añade ocho (cuatro de auditoría, informes y mantenimiento, y cuat
 
 Pendiente:
 
-- Pruebas activas de auditoría (TLS, HTTP, formularios). Requieren registro de alcance y autorización.
+- Pruebas de TLS y de cabeceras HTTP. Las pruebas HTTP y de formularios existen desde la etapa 5 (ver su sección).
 - Plugins: instalación y habilitación desde la terminal no existen. No hay ejecución de plugins.
 - Restauración de copias desde la terminal. Existe en la API, con autorización explícita.
 - Verificación criptográfica de la autorización escrita y firma de informes. No hay PDF.
@@ -303,6 +303,42 @@ Verificación final de la rama: 498 pruebas recogidas; 497 aprobadas, 0 fallidas
 (`tests/test_lanzador.py`, análisis sintáctico con PowerShell, no disponible). `ruff check .` sin
 errores; `ruff format --check .` sin cambios pendientes (131 archivos); `mypy --strict src` sin errores
 (79 archivos).
+
+## Etapa 5: motor de pruebas HTTP y formularios (CRITERIOS CUMPLIDOS EN LINUX; WINDOWS NO VERIFICADO)
+
+Rama `etapa-5-motor-http`, desde `main` (`add4b42`). No fusionada. Uso, configuración y límites:
+`docs/PRUEBAS_HTTP.md`. Controles de seguridad: `docs/seguridad.md`, sección de la etapa 5.
+
+Verificado en Linux:
+
+- **Motor.** Pruebas de formulario, de formato, de credenciales, de cuentas sintéticas, de MFA, de
+  sesiones, de límite de frecuencia, de CSRF y de consistencia de respuestas, contra un servidor de
+  laboratorio local. Resultados PASS, FAIL, BLOCKED, ERROR y SKIPPED.
+- **Persistencia.** Migración 14, añadir-solo. Cada ejecución se abre antes de la primera petición y
+  se cierra una sola vez.
+- **Informes.** JSON, CSV, HTML y TXT en `reports/pruebas/`, con verificación de SHA-256 y tamaño.
+- **CLI.** Grupos `forms`, `auth`, `security`, `requests`, `reports`, `test`, `targets` y `accounts`,
+  con códigos de salida 0 a 4. Ctrl+C solicita la cancelación de la ejecución activa.
+- **Permisos.** Registrar objetivos y ejecutar pruebas son operaciones críticas del guardián:
+  confirmación y reautenticación reciente.
+
+Verificación final de la rama: 836 pruebas recogidas, 835 aprobadas, 0 fallidas y 1 omitida
+(`tests/test_lanzador.py`, PowerShell no disponible). De ellas, 140 son nuevas (`tests/test_pruebas_http.py`,
+`tests/test_pruebas_unitarias.py` y `tests/test_cli_pruebas.py`). `ruff check .` sin errores;
+`ruff format --check .` sin cambios pendientes (181 archivos); `mypy --strict src` sin errores (106
+archivos); `node --check` correcto en los cuatro archivos JS de la interfaz gráfica. `pip check` informa
+de un conflicto previo, ajeno a esta etapa: camelot-py 1.0.9 requiere pypdf<6.0 y está instalado pypdf
+6.17.0.
+
+Pendiente:
+
+- Pruebas de TLS y de cabeceras HTTP.
+- Windows: `natxajo.cmd`, `natxajo.ps1` y la CLI no se han ejecutado en PowerShell 5.1, PowerShell 7
+  ni CMD.
+- Interfaz gráfica y menú de terminal sin operaciones de pruebas.
+- Recuperación de ejecuciones interrumpidas por la caída del proceso.
+- Especificación alternativa `771fc6bf` (etapa 5 con plugins, motor de anomalías, sesiones, informes
+  y mantenimiento): no aplicada.
 
 ## Auditoría posterior a la etapa 2
 

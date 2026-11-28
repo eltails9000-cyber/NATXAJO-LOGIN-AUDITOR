@@ -9,6 +9,7 @@ from pathlib import Path
 
 from natxajo_auditor import __version__
 from natxajo_auditor.core.exceptions import NatxajoError
+from natxajo_auditor.interfaces.cli.app import ejecutar_cli, es_comando_cli
 from natxajo_auditor.interfaces.gui import run_gui
 from natxajo_auditor.interfaces.terminal.app import run_terminal
 from natxajo_auditor.kernel.context import RuntimeContext
@@ -35,9 +36,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None, project_root: Path | None = None) -> int:
+    lista = list(sys.argv[1:] if argv is None else argv)
+    if lista and es_comando_cli(lista[0]):
+        return _cli(lista, project_root)
     # Se analizan los argumentos antes de tocar el disco: --version no crea archivos.
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(lista)
     if args.sin_navegador and not args.gui:
         parser.error("--sin-navegador solo tiene efecto junto con --gui")
     root = (project_root or Path.cwd()).resolve()
@@ -51,5 +55,20 @@ def main(argv: Sequence[str] | None = None, project_root: Path | None = None) ->
         if args.gui:
             return run_gui(kernel, open_browser=not args.sin_navegador)
         return run_terminal(kernel)
+    finally:
+        kernel.stop()
+
+
+def _cli(argv: Sequence[str], project_root: Path | None) -> int:
+    """Comandos `natxajo <grupo> <acción>`: mismo núcleo, mismas reglas que la GUI y la terminal."""
+    root = (project_root or Path.cwd()).resolve()
+    kernel = Kernel(RuntimeContext(project_root=root))
+    try:
+        kernel.start()
+    except (NatxajoError, OSError) as exc:
+        print(f"No se pudo iniciar la plataforma: {exc}", file=sys.stderr)
+        return 4
+    try:
+        return ejecutar_cli(kernel, argv)
     finally:
         kernel.stop()

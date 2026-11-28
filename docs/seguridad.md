@@ -119,13 +119,44 @@ Estos límites vienen del documento maestro y no se relajan:
   reversión y la actualización verifican la copia del almacén (firma, integridad y versión) antes de
   cambiar nada. Un editor revocado no puede actualizar ni revertir. Detalle en
   `docs/PLUGINS_CICLO.md`.
-- **Límites.** No hay pruebas activas, verificación criptográfica de la autorización ni firma de
+- **Límites.** No hay verificación criptográfica de la autorización ni firma de
   informes.
+
+## Controles de la etapa 5
+
+- **Objetivos autorizados.** Solo se prueban orígenes `http://` o `https://` que un administrador ha
+  registrado con confirmación. Un origen con credenciales, ruta, consulta, fragmento, esquema
+  distinto o puerto inválido se rechaza. Las peticiones no siguen redirecciones.
+- **Plan antes de enviar.** Objetivo, formulario, cuentas, variables de entorno y límites se validan
+  antes de abrir la ejecución. Un plan no válido no envía nada ni deja registro.
+- **Credenciales fuera de los archivos.** Las contraseñas de las cuentas sintéticas se leen del
+  entorno en cada ejecución (`NATXAJO_PRUEBA_…`). Nunca se escriben en configuración, base de datos,
+  registros ni informes, y el error nombra la variable, nunca su valor. La contraseña de la
+  plataforma se pide sin eco o desde la entrada estándar; no se acepta como argumento.
+- **Cuentas sintéticas.** El usuario debe empezar por `prueba-` o `sintetica-`, el correo debe ser de
+  un dominio de prueba, y ninguna cuenta puede coincidir con una cuenta de la plataforma.
+- **Matrices acotadas.** Valores fijos de prueba y longitudes límite. No se generan contraseñas
+  candidatas ni variantes, y no hay fuerza bruta ni credential stuffing. El límite de frecuencia hace
+  como mucho diez intentos incorrectos y se detiene en el primer bloqueo.
+- **Límites de ejecución.** Presupuesto de peticiones (500 como máximo), concurrencia (4), pausa (5 s),
+  tiempo máximo por petición (30 s) y cancelación cooperativa con Ctrl+C.
+- **Respuestas acotadas.** El cuerpo de respuesta se limita a 256 KiB. Los motivos son textos fijos o
+  códigos HTTP, nunca fragmentos del cuerpo. Las cookies se analizan por atributos, sin guardar sus
+  valores.
+- **Permisos.** Registrar objetivos y ejecutar pruebas son operaciones críticas: exigen confirmación y
+  reautenticación reciente. Exportar informes requiere `pruebas:nucleo:informe:escribir`, y las
+  lecturas, `pruebas:nucleo:resultado:leer`.
+- **Persistencia añadir-solo.** Objetivos, ejecuciones, resultados y exportaciones no se modifican ni
+  se borran (disparadores de la migración 14).
+- **Informes verificables.** Cada exportación registra su SHA-256 y su tamaño. El CSV neutraliza las
+  fórmulas y el HTML escapa todo el contenido.
+- **Auditoría.** Eventos `pruebas.objetivo_registrado`, `pruebas.ejecucion_iniciada`,
+  `pruebas.ejecucion_terminada` y `pruebas.informe_exportado`, sin secretos.
 
 ## Qué NO está implementado
 
-- **Auditoría activa.** No hay pruebas contra sistemas en ejecución (TLS, cabeceras HTTP, formularios).
-  Requieren un registro de alcance y autorización que todavía no existe.
+- **Pruebas de TLS y de cabeceras HTTP.** No existen. Las pruebas HTTP y de formularios de la etapa 5
+  solo operan contra objetivos registrados (ver la sección anterior).
 - **Instalación y habilitación de plugins desde la terminal.** No existen: solo se hacen por la API.
   La cuarentena, la actualización y la reversión sí se pueden hacer desde la terminal (opciones 29 a
   33).

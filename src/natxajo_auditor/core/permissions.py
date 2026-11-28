@@ -28,6 +28,7 @@ SUBSYSTEMS: frozenset[str] = frozenset(
         "diagnosticos",
         "informes",
         "mantenimiento",
+        "pruebas",
     }
 )
 ACTIONS: frozenset[str] = frozenset(

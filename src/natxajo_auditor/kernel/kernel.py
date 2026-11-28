@@ -31,6 +31,7 @@ from natxajo_auditor.kernel.composition import (
     MODULES,
     OUTBOX,
     PLUGINS,
+    PRUEBAS,
     REPORTS,
     SECURITY,
     SERVICE_AUDIT,
@@ -56,6 +57,7 @@ if TYPE_CHECKING:
     from natxajo_auditor.maintenance.service import MaintenanceService
     from natxajo_auditor.modules.manager import ModuleManager
     from natxajo_auditor.plugins.manager import PluginManager
+    from natxajo_auditor.pruebas.servicio import PruebasService
     from natxajo_auditor.reporting.service import ReportService
     from natxajo_auditor.security.service import SecurityService
     from natxajo_auditor.storage.audit import AuditLog
@@ -190,6 +192,10 @@ class Kernel:
     @property
     def maintenance(self) -> MaintenanceService:
         return self.services.fetch(MAINTENANCE)
+
+    @property
+    def pruebas(self) -> PruebasService:
+        return self.services.fetch(PRUEBAS)
 
     def _close_services(self) -> None:
         if self.services.has(SERVICE_DATABASE):

@@ -17,9 +17,9 @@ import json
 from dataclasses import dataclass
 
 from natxajo_auditor.auditing.results import AuditRun, to_record
+from natxajo_auditor.core.utilities import csv_cell
 
 FORMATS: tuple[str, ...] = ("json", "csv", "html", "txt")
-FORMULA_PREFIXES: tuple[str, ...] = ("=", "+", "-", "@", "\t", "\r")
 
 METHODOLOGY = (
     "Evaluación sin conexión de la configuración declarada en el documento de entrada. "
@@ -85,29 +85,17 @@ def _csv(run: AuditRun) -> str:
     for outcome in run.outcomes:
         writer.writerow(
             [
-                _csv_cell(outcome.rule_id),
-                _csv_cell(outcome.title),
-                _csv_cell(outcome.path),
-                _csv_cell(outcome.status.value),
-                _csv_cell(outcome.severity.value),
-                _csv_cell(outcome.observed),
-                _csv_cell(outcome.expected),
-                _csv_cell(outcome.recommendation),
+                csv_cell(outcome.rule_id),
+                csv_cell(outcome.title),
+                csv_cell(outcome.path),
+                csv_cell(outcome.status.value),
+                csv_cell(outcome.severity.value),
+                csv_cell(outcome.observed),
+                csv_cell(outcome.expected),
+                csv_cell(outcome.recommendation),
             ]
         )
     return buffer.getvalue()
-
-
-def _csv_cell(value: object) -> str:
-    if value is None:
-        text = ""
-    elif isinstance(value, bool):
-        text = "true" if value else "false"
-    else:
-        text = str(value)
-    if text.startswith(FORMULA_PREFIXES):
-        return "'" + text
-    return text
 
 
 def _html(run: AuditRun, meta: ReportMeta) -> str:
